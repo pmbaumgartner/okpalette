@@ -198,10 +198,7 @@ fn select_farthest_candidate(nearest_distances: &[f32]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn rgb(r: u8, g: u8, b: u8) -> Rgb8 {
-        Rgb8 { r, g, b }
-    }
+    use crate::test_support::{assert_unique_rgb, lab, rgb};
 
     fn candidate(rgb: Rgb8) -> Candidate {
         Candidate::from_rgb(rgb)
@@ -229,15 +226,6 @@ mod tests {
         }
     }
 
-    fn assert_no_duplicates(colors: &[Rgb8]) {
-        for (index, color) in colors.iter().enumerate() {
-            assert!(
-                !colors[index + 1..].contains(color),
-                "duplicate color in palette: {color:?}"
-            );
-        }
-    }
-
     #[test]
     fn selects_requested_number_without_duplicates() {
         let candidates = candidates(&[
@@ -251,7 +239,7 @@ mod tests {
         let palette = select_palette(&candidates, options(3)).unwrap();
 
         assert_eq!(palette.len(), 3);
-        assert_no_duplicates(&palette);
+        assert_unique_rgb(&palette);
     }
 
     #[test]
@@ -288,7 +276,7 @@ mod tests {
         let palette = select_palette(&candidates, options(candidates.len())).unwrap();
 
         assert_eq!(palette.len(), candidates.len());
-        assert_no_duplicates(&palette);
+        assert_unique_rgb(&palette);
         for candidate in candidates {
             assert!(palette.contains(&candidate.rgb));
         }
@@ -304,22 +292,8 @@ mod tests {
     #[test]
     fn seed_colors_influence_first_generated_color() {
         let candidates = vec![
-            candidate_with_lab(
-                rgb(10, 0, 0),
-                Oklab {
-                    l: 0.1,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
-            candidate_with_lab(
-                rgb(20, 0, 0),
-                Oklab {
-                    l: 0.9,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
+            candidate_with_lab(rgb(10, 0, 0), lab(0.1, 0.0, 0.0)),
+            candidate_with_lab(rgb(20, 0, 0), lab(0.9, 0.0, 0.0)),
         ];
         let seed_colors = [rgb(0, 0, 0)];
         let seeded_options = PaletteOptions {
@@ -383,22 +357,8 @@ mod tests {
     #[test]
     fn non_grid_anchors_influence_distance_without_reducing_selectable_count() {
         let candidates = vec![
-            candidate_with_lab(
-                rgb(10, 0, 0),
-                Oklab {
-                    l: 0.1,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
-            candidate_with_lab(
-                rgb(20, 0, 0),
-                Oklab {
-                    l: 0.9,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
+            candidate_with_lab(rgb(10, 0, 0), lab(0.1, 0.0, 0.0)),
+            candidate_with_lab(rgb(20, 0, 0), lab(0.9, 0.0, 0.0)),
         ];
         let avoid_colors = [rgb(0, 0, 0)];
         let options = PaletteOptions {
@@ -444,22 +404,8 @@ mod tests {
     #[test]
     fn equal_score_ties_choose_lower_candidate_index() {
         let candidates = vec![
-            candidate_with_lab(
-                rgb(10, 0, 0),
-                Oklab {
-                    l: 0.5,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
-            candidate_with_lab(
-                rgb(20, 0, 0),
-                Oklab {
-                    l: 0.5,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
+            candidate_with_lab(rgb(10, 0, 0), lab(0.5, 0.0, 0.0)),
+            candidate_with_lab(rgb(20, 0, 0), lab(0.5, 0.0, 0.0)),
         ];
         let seed_colors = [rgb(0, 0, 0)];
         let options = PaletteOptions {

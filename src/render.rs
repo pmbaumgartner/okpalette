@@ -110,13 +110,10 @@ fn swatch_bounds(index: usize, color_count: usize, width: u32) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_png_dimensions, rgb};
 
     fn test_palette() -> Vec<Rgb8> {
-        vec![
-            Rgb8 { r: 255, g: 0, b: 0 },
-            Rgb8 { r: 0, g: 255, b: 0 },
-            Rgb8 { r: 0, g: 0, b: 255 },
-        ]
+        vec![rgb(255, 0, 0), rgb(0, 255, 0), rgb(0, 0, 255)]
     }
 
     #[test]
@@ -134,9 +131,7 @@ mod tests {
     fn renders_png_with_expected_signature_and_dimensions() {
         let png = render_palette_png(&test_palette(), 36, 8).unwrap();
 
-        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
-        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 36);
-        assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 8);
+        assert_png_dimensions(&png, 36, 8);
     }
 
     #[test]

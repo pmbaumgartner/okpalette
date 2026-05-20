@@ -1,24 +1,14 @@
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 from typing import Any, Callable
 
 import pytest
 
+from conftest import assert_png_dimensions
 import okpalette
 from okpalette import palette_png, palette_svg, save_palette, view_palette
 from okpalette import _plot
-
-
-PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-
-
-def png_dimensions(png: bytes) -> tuple[int, int]:
-    return (
-        struct.unpack(">I", png[16:20])[0],
-        struct.unpack(">I", png[20:24])[0],
-    )
 
 
 def test_palette_svg_renders_normalized_swatches() -> None:
@@ -33,8 +23,7 @@ def test_palette_svg_renders_normalized_swatches() -> None:
 def test_palette_png_renders_png_bytes() -> None:
     png = palette_png(["#F00", "#00F"], width=20, height=6)
 
-    assert png.startswith(PNG_SIGNATURE)
-    assert png_dimensions(png) == (20, 6)
+    assert_png_dimensions(png, 20, 6)
 
 
 def test_view_palette_is_displayable_and_saves_files(tmp_path: Path) -> None:
@@ -49,7 +38,7 @@ def test_view_palette_is_displayable_and_saves_files(tmp_path: Path) -> None:
     png_path = view.save(tmp_path / "palette.png")
 
     assert svg_path.read_text(encoding="utf-8").startswith("<svg")
-    assert png_path.read_bytes().startswith(PNG_SIGNATURE)
+    assert_png_dimensions(png_path.read_bytes(), 20, 6)
 
 
 def test_save_palette_rejects_unknown_suffix(tmp_path: Path) -> None:

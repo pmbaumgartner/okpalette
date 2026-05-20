@@ -5,18 +5,13 @@ from typing import Any, cast
 
 import pytest
 
+from conftest import raw_palette
 from okpalette import create_palette
 
 
 @pytest.mark.parametrize("grid_size", ["coarse", "medium", "fine", 1, 16, 255])
 def test_grid_size_accepts_names_and_integer_steps(grid_size: object) -> None:
-    palette = create_palette(
-        1,
-        grid_size=cast(Any, grid_size),
-        lightness=None,
-        chroma=None,
-        background=None,
-    )
+    palette = raw_palette(1, grid_size=cast(Any, grid_size))
 
     assert len(palette) == 1
 
@@ -96,23 +91,14 @@ def test_distance_weights_reject_invalid_values(call: object) -> None:
 
 def test_impossible_constraints_raise_value_error() -> None:
     with pytest.raises(ValueError, match="candidate colors remain"):
-        create_palette(
-            2,
-            grid_size=255,
-            lightness=(0.99, 1.0),
-            chroma=None,
-            background=None,
-        )
+        raw_palette(2, lightness=(0.99, 1.0))
 
 
 def test_avoid_and_background_colors_are_not_returned() -> None:
-    palette = create_palette(
+    palette = raw_palette(
         6,
         avoid_colors=["#000000"],
         background="#ffffff",
-        grid_size=255,
-        lightness=None,
-        chroma=None,
     )
 
     assert len(palette) == 6
@@ -121,19 +107,13 @@ def test_avoid_and_background_colors_are_not_returned() -> None:
 
 
 def test_background_accepts_single_color_or_sequence() -> None:
-    from_tuple = create_palette(
+    from_tuple = raw_palette(
         7,
         background=(255, 255, 255),
-        grid_size=255,
-        lightness=None,
-        chroma=None,
     )
-    from_sequence = create_palette(
+    from_sequence = raw_palette(
         6,
         background=["#ffffff", (0, 0, 255)],
-        grid_size=255,
-        lightness=None,
-        chroma=None,
     )
 
     assert "#ffffff" not in from_tuple
@@ -147,20 +127,15 @@ def test_background_contrast_rejects_invalid_preset() -> None:
 
 
 def test_high_background_contrast_filters_light_teal_against_pale_blue_background() -> None:
-    unfiltered = create_palette(
+    unfiltered = raw_palette(
         729,
-        background=None,
         grid_size=32,
-        lightness=None,
-        chroma=None,
     )
-    high_contrast = create_palette(
+    high_contrast = raw_palette(
         679,
         background="#d1dde4",
         background_contrast="high",
         grid_size=32,
-        lightness=None,
-        chroma=None,
     )
 
     assert "#c0e0e0" in unfiltered

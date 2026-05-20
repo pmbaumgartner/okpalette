@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import pytest
 
+from conftest import raw_palette
 import okpalette
 from okpalette import palette_png, palette_svg, save_palette, view_palette
 from okpalette import create_label_palette, create_label_palette_from_columns
@@ -96,7 +97,7 @@ def test_default_background_excludes_white_when_white_is_on_grid() -> None:
 
 
 def test_background_can_be_disabled() -> None:
-    palette = create_palette(8, grid_size=255, lightness=None, chroma=None, background=None)
+    palette = raw_palette(8)
 
     assert len(palette) == 8
     assert "#ffffff" in palette

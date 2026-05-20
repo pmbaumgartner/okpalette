@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import re
 from typing import Any, cast
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from conftest import assert_hex_palette
 from okpalette import ColorLike, GridSize, create_palette, extend_palette
 
-HEX_COLOR = re.compile(r"#[0-9a-f]{6}\Z")
 HEX_DIGITS = "0123456789abcdef"
-
-
-def assert_hex_palette(palette: list[str], palette_size: int) -> None:
-    assert len(palette) == palette_size
-    assert all(isinstance(color, str) and HEX_COLOR.fullmatch(color) for color in palette)
-    assert len(set(palette)) == len(palette)
 
 
 def test_repeated_default_calls_produce_identical_unique_output() -> None:

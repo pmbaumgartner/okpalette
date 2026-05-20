@@ -67,6 +67,7 @@ fn srgb_channel_to_linear(channel: u8) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{lab, rgb};
 
     fn assert_approx(actual: f32, expected: f32) {
         assert!(
@@ -84,50 +85,11 @@ mod tests {
     #[test]
     fn converts_rgb_to_oklab_snapshots() {
         let cases = [
-            (
-                Rgb8 { r: 0, g: 0, b: 0 },
-                Oklab {
-                    l: 0.0,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
-            (
-                Rgb8 {
-                    r: 255,
-                    g: 255,
-                    b: 255,
-                },
-                Oklab {
-                    l: 1.0,
-                    a: 0.0,
-                    b: 0.0,
-                },
-            ),
-            (
-                Rgb8 { r: 255, g: 0, b: 0 },
-                Oklab {
-                    l: 0.627_955,
-                    a: 0.224_863,
-                    b: 0.125_846,
-                },
-            ),
-            (
-                Rgb8 { r: 0, g: 255, b: 0 },
-                Oklab {
-                    l: 0.866_440,
-                    a: -0.233_888,
-                    b: 0.179_498,
-                },
-            ),
-            (
-                Rgb8 { r: 0, g: 0, b: 255 },
-                Oklab {
-                    l: 0.452_014,
-                    a: -0.032_457,
-                    b: -0.311_528,
-                },
-            ),
+            (rgb(0, 0, 0), lab(0.0, 0.0, 0.0)),
+            (rgb(255, 255, 255), lab(1.0, 0.0, 0.0)),
+            (rgb(255, 0, 0), lab(0.627_955, 0.224_863, 0.125_846)),
+            (rgb(0, 255, 0), lab(0.866_440, -0.233_888, 0.179_498)),
+            (rgb(0, 0, 255), lab(0.452_014, -0.032_457, -0.311_528)),
         ];
 
         for (rgb, expected) in cases {
@@ -137,12 +99,7 @@ mod tests {
 
     #[test]
     fn converts_oklab_to_oklch() {
-        let oklch = Oklab {
-            l: 0.25,
-            a: 3.0,
-            b: 4.0,
-        }
-        .to_oklch();
+        let oklch = lab(0.25, 3.0, 4.0).to_oklch();
 
         assert_approx(oklch.l, 0.25);
         assert_approx(oklch.c, 5.0);
@@ -151,35 +108,14 @@ mod tests {
 
     #[test]
     fn normalizes_oklch_hue() {
-        let oklch = Oklab {
-            l: 0.25,
-            a: 0.0,
-            b: -1.0,
-        }
-        .to_oklch();
+        let oklch = lab(0.25, 0.0, -1.0).to_oklch();
 
         assert_approx(oklch.h, 270.0);
     }
 
     #[test]
     fn formats_lowercase_hex() {
-        assert_eq!(
-            Rgb8 {
-                r: 0,
-                g: 15,
-                b: 170
-            }
-            .to_hex(),
-            "#000faa"
-        );
-        assert_eq!(
-            Rgb8 {
-                r: 255,
-                g: 128,
-                b: 1
-            }
-            .to_hex(),
-            "#ff8001"
-        );
+        assert_eq!(rgb(0, 15, 170).to_hex(), "#000faa");
+        assert_eq!(rgb(255, 128, 1).to_hex(), "#ff8001");
     }
 }

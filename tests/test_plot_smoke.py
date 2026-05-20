@@ -6,7 +6,8 @@ from typing import Any, Callable, cast
 
 import pytest
 
-from okpalette import create_label_palette, create_palette, extend_palette, save_palette
+from conftest import first_seen_label_palette, raw_label_palette
+from okpalette import create_palette, extend_palette, save_palette
 from okpalette._types import ColorLike
 
 pytestmark = pytest.mark.plot_smoke
@@ -93,35 +94,19 @@ def test_label_palette_position_review_artifact_is_written() -> None:
     _require_plot_smoke()
 
     positions, labels = _label_smoke_dataset_2d()
-    position_aware = cast(
-        dict[str, str],
-        create_label_palette(
-            positions,
-            labels,
-            grid_size=32,
-            lightness=None,
-            chroma=None,
-            background=MATPLOTLIB_3D_PANE_COLORS,
-            background_contrast="high",
-            max_points=None,
-        ),
+    position_aware = raw_label_palette(
+        positions,
+        labels,
+        grid_size=32,
+        background=MATPLOTLIB_3D_PANE_COLORS,
+        background_contrast="high",
+        max_points=None,
     )
-    unique_labels = list(dict.fromkeys(labels))
-    naive = dict(
-        zip(
-            unique_labels,
-            cast(
-                list[str],
-                create_palette(
-                    len(unique_labels),
-                    grid_size=32,
-                    lightness=None,
-                    chroma=None,
-                    background=MATPLOTLIB_3D_PANE_COLORS,
-                    background_contrast="high",
-                ),
-            ),
-        )
+    naive = first_seen_label_palette(
+        labels,
+        grid_size=32,
+        background=MATPLOTLIB_3D_PANE_COLORS,
+        background_contrast="high",
     )
 
     assert set(position_aware.values()) == set(naive.values())
@@ -154,35 +139,19 @@ def test_label_palette_3d_position_review_artifact_is_written() -> None:
     _require_plot_smoke()
 
     positions, labels = _label_smoke_dataset_3d()
-    position_aware = cast(
-        dict[str, str],
-        create_label_palette(
-            positions,
-            labels,
-            grid_size=32,
-            lightness=None,
-            chroma=None,
-            background=MATPLOTLIB_3D_PANE_COLORS,
-            background_contrast="high",
-            max_points=None,
-        ),
+    position_aware = raw_label_palette(
+        positions,
+        labels,
+        grid_size=32,
+        background=MATPLOTLIB_3D_PANE_COLORS,
+        background_contrast="high",
+        max_points=None,
     )
-    unique_labels = list(dict.fromkeys(labels))
-    first_seen = dict(
-        zip(
-            unique_labels,
-            cast(
-                list[str],
-                create_palette(
-                    len(unique_labels),
-                    grid_size=32,
-                    lightness=None,
-                    chroma=None,
-                    background=MATPLOTLIB_3D_PANE_COLORS,
-                    background_contrast="high",
-                ),
-            ),
-        )
+    first_seen = first_seen_label_palette(
+        labels,
+        grid_size=32,
+        background=MATPLOTLIB_3D_PANE_COLORS,
+        background_contrast="high",
     )
 
     assert set(position_aware.values()) == set(first_seen.values())

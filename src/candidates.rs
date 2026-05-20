@@ -296,6 +296,7 @@ fn hue_in_range(hue: f32, start: f32, end: f32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::rgb;
 
     fn rgb_values(candidates: &[Candidate]) -> Vec<Rgb8> {
         candidates.iter().map(|candidate| candidate.rgb).collect()
@@ -303,10 +304,6 @@ mod tests {
 
     fn small_candidates(constraints: CandidateConstraints) -> Result<Vec<Candidate>> {
         generate_candidates(GridSize::Step(255), constraints, 0)
-    }
-
-    fn rgb(r: u8, g: u8, b: u8) -> Rgb8 {
-        Rgb8 { r, g, b }
     }
 
     #[test]
@@ -337,15 +334,8 @@ mod tests {
             generate_candidates(GridSize::Step(250), CandidateConstraints::default(), 0).unwrap();
 
         assert_eq!(candidates.len(), 27);
-        assert_eq!(candidates.first().unwrap().rgb, Rgb8 { r: 0, g: 0, b: 0 });
-        assert_eq!(
-            candidates.last().unwrap().rgb,
-            Rgb8 {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
+        assert_eq!(candidates.first().unwrap().rgb, rgb(0, 0, 0));
+        assert_eq!(candidates.last().unwrap().rgb, rgb(255, 255, 255));
     }
 
     #[test]
@@ -364,30 +354,14 @@ mod tests {
         assert_eq!(
             rgb_values(&candidates),
             vec![
-                Rgb8 { r: 0, g: 0, b: 0 },
-                Rgb8 { r: 0, g: 0, b: 255 },
-                Rgb8 { r: 0, g: 255, b: 0 },
-                Rgb8 {
-                    r: 0,
-                    g: 255,
-                    b: 255
-                },
-                Rgb8 { r: 255, g: 0, b: 0 },
-                Rgb8 {
-                    r: 255,
-                    g: 0,
-                    b: 255
-                },
-                Rgb8 {
-                    r: 255,
-                    g: 255,
-                    b: 0
-                },
-                Rgb8 {
-                    r: 255,
-                    g: 255,
-                    b: 255
-                },
+                rgb(0, 0, 0),
+                rgb(0, 0, 255),
+                rgb(0, 255, 0),
+                rgb(0, 255, 255),
+                rgb(255, 0, 0),
+                rgb(255, 0, 255),
+                rgb(255, 255, 0),
+                rgb(255, 255, 255),
             ]
         );
     }
@@ -405,15 +379,8 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(rgb_values(&dark), vec![Rgb8 { r: 0, g: 0, b: 0 }]);
-        assert_eq!(
-            rgb_values(&light),
-            vec![Rgb8 {
-                r: 255,
-                g: 255,
-                b: 255
-            }]
-        );
+        assert_eq!(rgb_values(&dark), vec![rgb(0, 0, 0)]);
+        assert_eq!(rgb_values(&light), vec![rgb(255, 255, 255)]);
     }
 
     #[test]
@@ -431,21 +398,10 @@ mod tests {
 
         assert_eq!(
             rgb_values(&neutrals),
-            vec![
-                Rgb8 { r: 0, g: 0, b: 0 },
-                Rgb8 {
-                    r: 255,
-                    g: 255,
-                    b: 255
-                }
-            ]
+            vec![rgb(0, 0, 0), rgb(255, 255, 255)]
         );
-        assert!(!rgb_values(&saturated).contains(&Rgb8 { r: 0, g: 0, b: 0 }));
-        assert!(!rgb_values(&saturated).contains(&Rgb8 {
-            r: 255,
-            g: 255,
-            b: 255
-        }));
+        assert!(!rgb_values(&saturated).contains(&rgb(0, 0, 0)));
+        assert!(!rgb_values(&saturated).contains(&rgb(255, 255, 255)));
     }
 
     #[test]
@@ -457,8 +413,8 @@ mod tests {
         .unwrap();
         let rgbs = rgb_values(&candidates);
 
-        assert!(rgbs.contains(&Rgb8 { r: 0, g: 255, b: 0 }));
-        assert!(!rgbs.contains(&Rgb8 { r: 255, g: 0, b: 0 }));
+        assert!(rgbs.contains(&rgb(0, 255, 0)));
+        assert!(!rgbs.contains(&rgb(255, 0, 0)));
     }
 
     #[test]
@@ -470,8 +426,8 @@ mod tests {
         .unwrap();
         let rgbs = rgb_values(&candidates);
 
-        assert!(rgbs.contains(&Rgb8 { r: 255, g: 0, b: 0 }));
-        assert!(!rgbs.contains(&Rgb8 { r: 0, g: 255, b: 0 }));
+        assert!(rgbs.contains(&rgb(255, 0, 0)));
+        assert!(!rgbs.contains(&rgb(0, 255, 0)));
     }
 
     #[test]

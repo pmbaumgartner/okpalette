@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import Any, Hashable, cast
 
 import pytest
 
-from okpalette import create_label_palette, create_label_palette_from_columns, create_palette
+from conftest import assert_rgb_palette, first_seen_label_palette, raw_label_palette
+from okpalette import create_label_palette, create_label_palette_from_columns
 
 
 def test_label_palette_returns_first_seen_label_mapping() -> None:
@@ -35,18 +37,8 @@ def test_label_palette_formats_match_create_palette_formats() -> None:
     rgb = create_label_palette([0.0, 1.0], ["a", "b"], grid_size="coarse", format="rgb")
     rgb01 = create_label_palette([0.0, 1.0], ["a", "b"], grid_size="coarse", format="rgb01")
 
-    assert all(
-        isinstance(color, tuple)
-        and len(color) == 3
-        and all(type(component) is int for component in color)
-        for color in rgb.values()
-    )
-    assert all(
-        isinstance(color, tuple)
-        and len(color) == 3
-        and all(type(component) is float for component in color)
-        for color in rgb01.values()
-    )
+    assert_rgb_palette(rgb.values())
+    assert_rgb_palette(rgb01.values(), normalized=True)
 
 
 def test_label_palette_is_deterministic() -> None:
@@ -133,67 +125,39 @@ def test_label_palette_from_columns_rejects_mismatched_columns() -> None:
         create_label_palette_from_columns(frame, positions=["x"], label="label")
 
 
-def test_position_aware_fixture_beats_first_seen_assignment() -> None:
-    positions = [(0.0, 0.0), (10.0, 0.0), (0.1, 0.0), (10.1, 0.0)]
-    labels = ["a", "b", "c", "d"]
-    position_aware = cast(
-        dict[Hashable, str],
-        create_label_palette(
-            positions,
-            labels,
-            grid_size=255,
-            lightness=None,
-            chroma=None,
-            background=None,
-        ),
-    )
-    first_seen = cast(
-        dict[Hashable, str],
-        dict(
-            zip(
-                labels,
-                create_palette(4, grid_size=255, lightness=None, chroma=None, background=None),
-            )
-        ),
-    )
+def test_position_aware_fixture_beats_first_seen_assignment(
+    separated_label_fixture: tuple[list[tuple[float, float]], list[str]],
+) -> None:
+    positions, labels = separated_label_fixture
+    position_aware = raw_label_palette(positions, labels)
+    first_seen = first_seen_label_palette(labels)
 
     assert set(position_aware.values()) == set(first_seen.values())
     assert _fixture_quality(position_aware) > _fixture_quality(first_seen)
 
 
-def test_label_palette_preserves_palette_set_with_background_contrast() -> None:
-    positions = [(0.0, 0.0), (10.0, 0.0), (0.1, 0.0), (10.1, 0.0)]
-    labels = ["a", "b", "c", "d"]
-    position_aware = cast(
-        dict[Hashable, str],
-        create_label_palette(
-            positions,
-            labels,
-            grid_size=255,
-            lightness=None,
-            chroma=None,
-            background=["#ffffff", "#000000"],
-            background_contrast="high",
-        ),
+def test_label_palette_preserves_palette_set_with_background_contrast(
+    separated_label_fixture: tuple[list[tuple[float, float]], list[str]],
+) -> None:
+    positions, labels = separated_label_fixture
+    position_aware = raw_label_palette(
+        positions,
+        labels,
+        background=["#ffffff", "#000000"],
+        background_contrast="high",
     )
-    first_seen = cast(
-        list[str],
-        create_palette(
-            4,
-            grid_size=255,
-            lightness=None,
-            chroma=None,
-            background=["#ffffff", "#000000"],
-            background_contrast="high",
-        ),
+    first_seen = first_seen_label_palette(
+        labels,
+        background=["#ffffff", "#000000"],
+        background_contrast="high",
     )
 
-    assert set(position_aware.values()) == set(first_seen)
+    assert set(position_aware.values()) == set(first_seen.values())
     assert "#ffffff" not in position_aware.values()
     assert "#000000" not in position_aware.values()
 
 
-def _fixture_quality(mapping: dict[Hashable, str]) -> float:
+def _fixture_quality(mapping: Mapping[str, str]) -> float:
     return _oklab_distance_squared(mapping["a"], mapping["c"]) + _oklab_distance_squared(
         mapping["b"], mapping["d"]
     )

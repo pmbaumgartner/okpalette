@@ -52,50 +52,16 @@ fn parse_hex_byte(byte: u8, index: usize) -> Result<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::rgb;
 
     #[test]
     fn parses_valid_hex_colors() {
         let cases = [
-            (
-                "#0fA",
-                Rgb8 {
-                    r: 0,
-                    g: 255,
-                    b: 170,
-                },
-            ),
-            (
-                "#00ffaa",
-                Rgb8 {
-                    r: 0,
-                    g: 255,
-                    b: 170,
-                },
-            ),
-            (
-                "0fA",
-                Rgb8 {
-                    r: 0,
-                    g: 255,
-                    b: 170,
-                },
-            ),
-            (
-                "00ffaa",
-                Rgb8 {
-                    r: 0,
-                    g: 255,
-                    b: 170,
-                },
-            ),
-            (
-                "Cc33aA",
-                Rgb8 {
-                    r: 204,
-                    g: 51,
-                    b: 170,
-                },
-            ),
+            ("#0fA", rgb(0, 255, 170)),
+            ("#00ffaa", rgb(0, 255, 170)),
+            ("0fA", rgb(0, 255, 170)),
+            ("00ffaa", rgb(0, 255, 170)),
+            ("Cc33aA", rgb(204, 51, 170)),
         ];
 
         for (input, expected) in cases {

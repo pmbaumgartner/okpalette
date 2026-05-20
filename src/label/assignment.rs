@@ -245,10 +245,7 @@ fn swap_delta(
 mod tests {
     use super::super::graph::{GraphEdge, LabelGraph};
     use super::*;
-
-    fn rgb(r: u8, g: u8, b: u8) -> Rgb8 {
-        Rgb8 { r, g, b }
-    }
+    use crate::test_support::rgb;
 
     #[test]
     fn swap_delta_detects_improvement() {

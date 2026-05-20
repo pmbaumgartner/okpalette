@@ -8,6 +8,8 @@ pub mod error;
 pub mod label;
 pub mod parse;
 pub mod render;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
 use candidates::{
@@ -293,6 +295,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_canonical_hex_palette, assert_png_dimensions};
 
     #[test]
     fn native_bridge_generates_canonical_hex_palette() {
@@ -311,13 +314,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(palette.len(), 3);
-        assert!(palette.iter().all(|color| {
-            color.len() == 7
-                && color.starts_with('#')
-                && color.chars().skip(1).all(|ch| ch.is_ascii_hexdigit())
-                && color == &color.to_lowercase()
-        }));
+        assert_canonical_hex_palette(&palette, 3);
         assert!(!palette.contains(&"#ff0000".to_owned()));
         assert!(!palette.contains(&"#ffffff".to_owned()));
     }
@@ -369,9 +366,7 @@ mod tests {
         Python::attach(|py| {
             let png = palette_png_rs(py, colors, 20, 6).unwrap();
             let bytes = png.bind(py).as_bytes();
-            assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
-            assert_eq!(u32::from_be_bytes(bytes[16..20].try_into().unwrap()), 20);
-            assert_eq!(u32::from_be_bytes(bytes[20..24].try_into().unwrap()), 6);
+            assert_png_dimensions(bytes, 20, 6);
         });
     }
 }

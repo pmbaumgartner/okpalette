@@ -157,10 +157,7 @@ mod tests {
     use super::graph::LabelGraph;
     use super::*;
     use crate::candidates::generate_candidates;
-
-    fn rgb(r: u8, g: u8, b: u8) -> Rgb8 {
-        Rgb8 { r, g, b }
-    }
+    use crate::test_support::{rgb, separated_label_fixture};
 
     fn base_options<'a>(
         coordinates: &'a [f64],
@@ -212,9 +209,7 @@ mod tests {
 
     #[test]
     fn generated_color_set_matches_regular_palette_before_assignment() {
-        let coordinates = [0.0, 0.0, 10.0, 0.0, 0.1, 0.0, 10.1, 0.0];
-        let labels = [0, 1, 2, 3];
-        let fixed = [None, None, None, None];
+        let (coordinates, labels, fixed) = separated_label_fixture();
         let options = base_options(&coordinates, &labels, 4, &fixed);
         let label_palette = select_label_palette(options).unwrap();
         let candidates =
@@ -234,9 +229,7 @@ mod tests {
 
     #[test]
     fn position_aware_assignment_beats_first_seen_palette_assignment() {
-        let coordinates = [0.0, 0.0, 10.0, 0.0, 0.1, 0.0, 10.1, 0.0];
-        let labels = [0, 1, 2, 3];
-        let fixed = [None, None, None, None];
+        let (coordinates, labels, fixed) = separated_label_fixture();
         let options = base_options(&coordinates, &labels, 4, &fixed);
         let graph = build_label_graph(options).unwrap();
         let position_aware = select_label_palette(options).unwrap();
