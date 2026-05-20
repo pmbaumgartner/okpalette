@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Hashable as HashableABC
 from collections.abc import Mapping as MappingABC
+from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Hashable, List, Optional, Sequence, Tuple, Union, cast
 
@@ -57,6 +58,34 @@ _EXTEND_KWARGS = {
 ColorOut = Union[str, Rgb8, Rgb01]
 
 
+@dataclass(frozen=True)
+class _PaletteOptions:
+    seed_colors: Sequence[ColorLike] = ()
+    avoid_colors: Optional[Sequence[ColorLike]] = None
+    background: Optional[BackgroundLike] = "#ffffff"
+    background_contrast: BackgroundContrast = "normal"
+    lightness: Optional[Tuple[float, float]] = (0.20, 0.90)
+    chroma: Optional[Tuple[Optional[float], Optional[float]]] = (0.04, None)
+    hue: Optional[Tuple[float, float]] = None
+    grid_size: GridSize = "medium"
+    lightness_weight: float = 1.0
+    chroma_weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class _NormalizedPaletteOptions:
+    seed_hex: List[str]
+    avoid_hex: List[str]
+    background_hex: List[str]
+    background_distance: float
+    lightness_bounds: Optional[Tuple[float, float]]
+    chroma_bounds: Optional[Tuple[Optional[float], Optional[float]]]
+    hue_bounds: Optional[Tuple[float, float]]
+    grid_step: int
+    lightness_weight: float
+    chroma_weight: float
+
+
 def create_palette(
     palette_size: int,
     *,
@@ -78,16 +107,18 @@ def create_palette(
     output_format = validate_format(format)
     palette = _generate_palette_hex(
         size,
-        seed_colors=seed_colors,
-        avoid_colors=avoid_colors,
-        background=background,
-        background_contrast=background_contrast,
-        lightness=lightness,
-        chroma=chroma,
-        hue=hue,
-        grid_size=grid_size,
-        lightness_weight=lightness_weight,
-        chroma_weight=chroma_weight,
+        _PaletteOptions(
+            seed_colors=seed_colors,
+            avoid_colors=avoid_colors,
+            background=background,
+            background_contrast=background_contrast,
+            lightness=lightness,
+            chroma=chroma,
+            hue=hue,
+            grid_size=grid_size,
+            lightness_weight=lightness_weight,
+            chroma_weight=chroma_weight,
+        ),
     )
     return convert_hex_palette(palette, output_format)
 
@@ -112,30 +143,13 @@ def extend_palette(
     existing = normalize_color_sequence(colors, "colors")
     target = validate_positive_size("target_size", target_size)
     output_format = validate_format(kwargs.get("format", "hex"))
+    palette_options = _extend_palette_options(existing, kwargs)
 
     if include_existing and target < len(existing):
         raise ValueError("target_size must be greater than or equal to len(colors)")
 
     generated_size = target - len(existing) if include_existing else target
-    generated = _generate_palette_hex(
-        generated_size,
-        seed_colors=existing,
-        avoid_colors=cast(Optional[Sequence[ColorLike]], kwargs.get("avoid_colors")),
-        background=cast(Optional[BackgroundLike], kwargs.get("background", "#ffffff")),
-        background_contrast=cast(
-            BackgroundContrast,
-            kwargs.get("background_contrast", "normal"),
-        ),
-        lightness=cast(Optional[Tuple[float, float]], kwargs.get("lightness", (0.20, 0.90))),
-        chroma=cast(
-            Optional[Tuple[Optional[float], Optional[float]]],
-            kwargs.get("chroma", (0.04, None)),
-        ),
-        hue=cast(Optional[Tuple[float, float]], kwargs.get("hue")),
-        grid_size=cast(GridSize, kwargs.get("grid_size", "medium")),
-        lightness_weight=cast(float, kwargs.get("lightness_weight", 1.0)),
-        chroma_weight=cast(float, kwargs.get("chroma_weight", 1.0)),
-    )
+    generated = _generate_palette_hex(generated_size, palette_options)
     palette = existing + generated if include_existing else generated
     return convert_hex_palette(palette, output_format)
 
@@ -175,16 +189,18 @@ def create_label_palette(
         label_ids,
         len(ordered_labels),
         fixed_hex,
-        seed_colors=seed_colors,
-        avoid_colors=avoid_colors,
-        background=background,
-        background_contrast=background_contrast,
-        lightness=lightness,
-        chroma=chroma,
-        hue=hue,
-        grid_size=grid_size,
-        lightness_weight=lightness_weight,
-        chroma_weight=chroma_weight,
+        options=_PaletteOptions(
+            seed_colors=seed_colors,
+            avoid_colors=avoid_colors,
+            background=background,
+            background_contrast=background_contrast,
+            lightness=lightness,
+            chroma=chroma,
+            hue=hue,
+            grid_size=grid_size,
+            lightness_weight=lightness_weight,
+            chroma_weight=chroma_weight,
+        ),
         neighbors=neighbors,
         max_points=max_points,
     )
@@ -229,27 +245,9 @@ def create_label_palette_from_columns(
 
 def _generate_palette_hex(
     palette_size: int,
-    *,
-    seed_colors: Sequence[ColorLike],
-    avoid_colors: Optional[Sequence[ColorLike]],
-    background: Optional[BackgroundLike],
-    background_contrast: BackgroundContrast,
-    lightness: Optional[Tuple[float, float]],
-    chroma: Optional[Tuple[Optional[float], Optional[float]]],
-    hue: Optional[Tuple[float, float]],
-    grid_size: GridSize,
-    lightness_weight: float,
-    chroma_weight: float,
+    options: _PaletteOptions,
 ) -> List[str]:
-    seed_hex = normalize_color_sequence(seed_colors, "seed_colors")
-    avoid_hex = normalize_color_sequence(avoid_colors, "avoid_colors")
-    background_hex = normalize_background_colors(background, "background")
-    background_distance = validate_background_contrast(background_contrast)
-    lightness_bounds = validate_lightness(lightness)
-    chroma_bounds = validate_chroma(chroma)
-    hue_bounds = validate_hue(hue)
-    grid_step = resolve_grid_step(grid_size)
-    lightness_weight, chroma_weight = validate_weights(lightness_weight, chroma_weight)
+    normalized = _normalize_palette_options(options)
     generate_palette_rs = load_generate_palette_rs()
 
     if palette_size == 0:
@@ -257,16 +255,16 @@ def _generate_palette_hex(
 
     return generate_palette_rs(
         palette_size,
-        seed_hex or None,
-        avoid_hex or None,
-        background_hex or None,
-        background_distance,
-        lightness_bounds,
-        chroma_bounds,
-        hue_bounds,
-        grid_step,
-        lightness_weight,
-        chroma_weight,
+        normalized.seed_hex or None,
+        normalized.avoid_hex or None,
+        normalized.background_hex or None,
+        normalized.background_distance,
+        normalized.lightness_bounds,
+        normalized.chroma_bounds,
+        normalized.hue_bounds,
+        normalized.grid_step,
+        normalized.lightness_weight,
+        normalized.chroma_weight,
     )
 
 
@@ -277,28 +275,11 @@ def _generate_label_palette_hex(
     label_count: int,
     fixed_colors: Sequence[Optional[str]],
     *,
-    seed_colors: Sequence[ColorLike],
-    avoid_colors: Optional[Sequence[ColorLike]],
-    background: Optional[BackgroundLike],
-    background_contrast: BackgroundContrast,
-    lightness: Optional[Tuple[float, float]],
-    chroma: Optional[Tuple[Optional[float], Optional[float]]],
-    hue: Optional[Tuple[float, float]],
-    grid_size: GridSize,
-    lightness_weight: float,
-    chroma_weight: float,
+    options: _PaletteOptions,
     neighbors: int,
     max_points: Optional[int],
 ) -> List[str]:
-    seed_hex = normalize_color_sequence(seed_colors, "seed_colors")
-    avoid_hex = normalize_color_sequence(avoid_colors, "avoid_colors")
-    background_hex = normalize_background_colors(background, "background")
-    background_distance = validate_background_contrast(background_contrast)
-    lightness_bounds = validate_lightness(lightness)
-    chroma_bounds = validate_chroma(chroma)
-    hue_bounds = validate_hue(hue)
-    grid_step = resolve_grid_step(grid_size)
-    lightness_weight, chroma_weight = validate_weights(lightness_weight, chroma_weight)
+    normalized = _normalize_palette_options(options)
     neighbors = _validate_positive_int("neighbors", neighbors)
     max_points = _validate_optional_positive_int("max_points", max_points)
     generate_label_palette_rs = load_generate_label_palette_rs()
@@ -309,18 +290,72 @@ def _generate_label_palette_hex(
         list(label_ids),
         label_count,
         list(fixed_colors),
-        seed_hex or None,
-        avoid_hex or None,
-        background_hex or None,
-        background_distance,
-        lightness_bounds,
-        chroma_bounds,
-        hue_bounds,
-        grid_step,
-        lightness_weight,
-        chroma_weight,
+        normalized.seed_hex or None,
+        normalized.avoid_hex or None,
+        normalized.background_hex or None,
+        normalized.background_distance,
+        normalized.lightness_bounds,
+        normalized.chroma_bounds,
+        normalized.hue_bounds,
+        normalized.grid_step,
+        normalized.lightness_weight,
+        normalized.chroma_weight,
         neighbors,
         max_points,
+    )
+
+
+def _extend_palette_options(
+    seed_colors: Sequence[ColorLike],
+    kwargs: MappingABC[str, object],
+) -> _PaletteOptions:
+    return _PaletteOptions(
+        seed_colors=seed_colors,
+        avoid_colors=cast(Optional[Sequence[ColorLike]], kwargs.get("avoid_colors")),
+        background=cast(Optional[BackgroundLike], kwargs.get("background", "#ffffff")),
+        background_contrast=cast(
+            BackgroundContrast,
+            kwargs.get("background_contrast", "normal"),
+        ),
+        lightness=cast(
+            Optional[Tuple[float, float]],
+            kwargs.get("lightness", (0.20, 0.90)),
+        ),
+        chroma=cast(
+            Optional[Tuple[Optional[float], Optional[float]]],
+            kwargs.get("chroma", (0.04, None)),
+        ),
+        hue=cast(Optional[Tuple[float, float]], kwargs.get("hue")),
+        grid_size=cast(GridSize, kwargs.get("grid_size", "medium")),
+        lightness_weight=cast(float, kwargs.get("lightness_weight", 1.0)),
+        chroma_weight=cast(float, kwargs.get("chroma_weight", 1.0)),
+    )
+
+
+def _normalize_palette_options(options: _PaletteOptions) -> _NormalizedPaletteOptions:
+    seed_hex = normalize_color_sequence(options.seed_colors, "seed_colors")
+    avoid_hex = normalize_color_sequence(options.avoid_colors, "avoid_colors")
+    background_hex = normalize_background_colors(options.background, "background")
+    background_distance = validate_background_contrast(options.background_contrast)
+    lightness_bounds = validate_lightness(options.lightness)
+    chroma_bounds = validate_chroma(options.chroma)
+    hue_bounds = validate_hue(options.hue)
+    grid_step = resolve_grid_step(options.grid_size)
+    lightness_weight, chroma_weight = validate_weights(
+        options.lightness_weight,
+        options.chroma_weight,
+    )
+    return _NormalizedPaletteOptions(
+        seed_hex=seed_hex,
+        avoid_hex=avoid_hex,
+        background_hex=background_hex,
+        background_distance=background_distance,
+        lightness_bounds=lightness_bounds,
+        chroma_bounds=chroma_bounds,
+        hue_bounds=hue_bounds,
+        grid_step=grid_step,
+        lightness_weight=lightness_weight,
+        chroma_weight=chroma_weight,
     )
 
 
