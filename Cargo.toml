@@ -1,0 +1,16 @@
+[package]
+name = "glasbey-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Fast, dependency-free Glasbey categorical color palettes powered by Rust and OKLab"
+
+[lib]
+name = "_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Use abi3-py39 so one wheel can support Python 3.9+ where PyO3 APIs allow it.
+pyo3 = { version = "0.28.3", features = ["abi3-py39"] }
+rayon = "1.12"
+thiserror = "2.0"

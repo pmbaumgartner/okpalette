@@ -1,0 +1,19 @@
+.kata.local.toml
+.kata/
+
+# Rust build output
+target/
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Python/Rust extension build artifacts
+dist/
+build/
+*.egg-info/
+python/glasbey_rs/_core*.so
