@@ -6,12 +6,15 @@ pub mod candidates;
 pub mod color;
 pub mod error;
 pub mod parse;
+pub mod render;
 
 use algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
 use candidates::{generate_candidates, CandidateConstraints, GridSize};
 use color::Rgb8;
 use error::GlasbeyError;
 use parse::parse_hex_color;
+use pyo3::types::PyBytes;
+use render::{render_palette_png, render_palette_svg};
 
 #[pyfunction]
 #[pyo3(signature = (
@@ -105,6 +108,26 @@ fn parse_hex_colors(colors: Vec<String>) -> Result<Vec<Rgb8>, GlasbeyError> {
         .collect()
 }
 
+#[pyfunction]
+#[pyo3(signature = (colors, width = 1246, height = 154))]
+fn palette_svg_rs(colors: Vec<String>, width: u32, height: u32) -> PyResult<String> {
+    let colors = parse_hex_colors(colors).map_err(to_py_value_error)?;
+    render_palette_svg(&colors, width, height).map_err(to_py_value_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (colors, width = 1246, height = 154))]
+fn palette_png_rs(
+    py: Python<'_>,
+    colors: Vec<String>,
+    width: u32,
+    height: u32,
+) -> PyResult<Py<PyBytes>> {
+    let colors = parse_hex_colors(colors).map_err(to_py_value_error)?;
+    let png = render_palette_png(&colors, width, height).map_err(to_py_value_error)?;
+    Ok(PyBytes::new(py, &png).unbind())
+}
+
 fn to_py_value_error(error: GlasbeyError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
@@ -112,6 +135,8 @@ fn to_py_value_error(error: GlasbeyError) -> PyErr {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_palette_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(palette_svg_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(palette_png_rs, m)?)?;
     Ok(())
 }
 
@@ -177,5 +202,23 @@ mod tests {
                 requested: 9
             }
         );
+    }
+
+    #[test]
+    fn native_bridge_renders_svg_and_png_previews() {
+        let colors = vec!["#ff0000".to_owned(), "#00ff00".to_owned()];
+
+        let svg = palette_svg_rs(colors.clone(), 20, 6).unwrap();
+        assert!(svg.contains(r#"width="20" height="6""#));
+        assert!(svg.contains(r##"fill="#ff0000""##));
+
+        Python::initialize();
+        Python::attach(|py| {
+            let png = palette_png_rs(py, colors, 20, 6).unwrap();
+            let bytes = png.bind(py).as_bytes();
+            assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+            assert_eq!(u32::from_be_bytes(bytes[16..20].try_into().unwrap()), 20);
+            assert_eq!(u32::from_be_bytes(bytes[20..24].try_into().unwrap()), 6);
+        });
     }
 }

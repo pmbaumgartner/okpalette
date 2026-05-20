@@ -17,3 +17,6 @@ dist/
 build/
 *.egg-info/
 python/glasbey_rs/_core*.so
+
+# Generated smoke-test review artifacts
+output/

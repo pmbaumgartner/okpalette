@@ -12,3 +12,15 @@ def generate_palette_rs(
     lightness_weight: float = ...,
     chroma_weight: float = ...,
 ) -> List[str]: ...
+
+def palette_svg_rs(
+    colors: List[str],
+    width: int = ...,
+    height: int = ...,
+) -> str: ...
+
+def palette_png_rs(
+    colors: List[str],
+    width: int = ...,
+    height: int = ...,
+) -> bytes: ...

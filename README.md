@@ -43,6 +43,39 @@ rgb01 = create_palette(5, format="rgb01")
 # [(0.03137254901960784, 0.0, 0.3137254901960784), ...]
 ```
 
+## View A Palette
+
+Palette previews are rendered by the Rust extension as SVG or PNG, so no plotting dependency is
+required.
+
+```python
+from glasbey_rs import create_palette, palette_png, palette_svg, save_palette, view_palette
+
+colors = create_palette(12)
+
+svg = palette_svg(colors)
+png = palette_png(colors)
+save_palette(colors, "palette.svg")
+save_palette(colors, "palette.png")
+
+view_palette(colors)
+```
+
+`view_palette()` returns a small display object with `_repr_svg_()` and `_repr_png_()` methods for
+notebooks, plus a `.save()` method for writing SVG or PNG files.
+
+The default preview size is `1246 x 154` pixels, matching the original matplotlib smoke-test output.
+Use `width` and `height` to choose another fixed output size.
+
+To generate local SVG and PNG files for a quick visual review, run the opt-in plotting smoke tests:
+
+```bash
+GLASBEY_RS_PLOT_SMOKE=1 uv run --extra dev pytest tests/test_plot_smoke.py
+```
+
+The images are written to `output/plot_smoke/`. Set `GLASBEY_RS_PLOT_SMOKE_DIR` to choose another
+directory.
+
 ## Extend Existing Colors
 
 Use `extend_palette()` when you already have brand colors or a small palette and want more colors
@@ -189,3 +222,39 @@ extend_palette(
 )
 ```
 
+```python
+view_palette(
+    palette,
+    *,
+    width=1246,
+    height=154,
+)
+```
+
+```python
+palette_svg(
+    palette,
+    *,
+    width=1246,
+    height=154,
+)
+```
+
+```python
+palette_png(
+    palette,
+    *,
+    width=1246,
+    height=154,
+)
+```
+
+```python
+save_palette(
+    palette,
+    path,
+    *,
+    width=1246,
+    height=154,
+)
+```

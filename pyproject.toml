@@ -31,3 +31,6 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "plot_smoke: opt-in palette preview smoke tests that write review images",
+]

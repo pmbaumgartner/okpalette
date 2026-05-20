@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 import glasbey_rs
+from glasbey_rs import palette_png, palette_svg, save_palette, view_palette
 from glasbey_rs import create_palette, extend_palette
 from glasbey_rs import _format
 
@@ -17,15 +18,24 @@ def test_public_imports_and_exports() -> None:
     assert module is glasbey_rs
     assert create_palette is glasbey_rs.create_palette
     assert extend_palette is glasbey_rs.extend_palette
+    assert view_palette is glasbey_rs.view_palette
+    assert palette_svg is glasbey_rs.palette_svg
+    assert palette_png is glasbey_rs.palette_png
+    assert save_palette is glasbey_rs.save_palette
     assert set(getattr(glasbey_rs, "__all__")) == {
         "ColorFormat",
         "ColorLike",
         "GridSize",
+        "PaletteView",
         "Rgb01",
         "Rgb8",
         "__version__",
         "create_palette",
         "extend_palette",
+        "palette_png",
+        "palette_svg",
+        "save_palette",
+        "view_palette",
     }
 
 

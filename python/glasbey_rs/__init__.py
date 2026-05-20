@@ -19,6 +19,7 @@ from ._format import (
     validate_positive_size,
     validate_weights,
 )
+from ._plot import PaletteView, palette_png, palette_svg, save_palette, view_palette
 from ._types import ColorFormat, ColorLike, GridSize, Rgb01, Rgb8
 
 try:
@@ -160,9 +161,14 @@ __all__ = [
     "ColorFormat",
     "ColorLike",
     "GridSize",
+    "PaletteView",
     "Rgb01",
     "Rgb8",
     "__version__",
     "create_palette",
     "extend_palette",
+    "palette_png",
+    "palette_svg",
+    "save_palette",
+    "view_palette",
 ]

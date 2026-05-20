@@ -26,6 +26,12 @@ pub enum GlasbeyError {
         "only {available} candidate colors remain after applying constraints, but palette_size={requested} was requested. Try relaxing lightness, chroma, hue, or grid_size."
     )]
     InsufficientCandidates { available: usize, requested: usize },
+
+    #[error("invalid palette render request: {message}")]
+    InvalidRenderRequest { message: &'static str },
+
+    #[error("failed to encode PNG palette preview: {message}")]
+    PngEncoding { message: String },
 }
 
 pub type Result<T> = std::result::Result<T, GlasbeyError>;
