@@ -6,7 +6,7 @@ from typing import Any, cast
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from glasbey_rs import ColorLike, GridSize, create_palette, extend_palette
+from okpalette import ColorLike, GridSize, create_palette, extend_palette
 
 HEX_COLOR = re.compile(r"#[0-9a-f]{6}\Z")
 HEX_DIGITS = "0123456789abcdef"

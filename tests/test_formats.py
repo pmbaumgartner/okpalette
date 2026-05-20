@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from glasbey_rs import create_palette, extend_palette
+from okpalette import create_palette, extend_palette
 
 HEX_COLOR = re.compile(r"#[0-9a-f]{6}\Z")
 

@@ -6,19 +6,19 @@ from typing import Callable
 
 import pytest
 
-from glasbey_rs import create_palette, extend_palette, save_palette
-from glasbey_rs._types import ColorLike
+from okpalette import create_palette, extend_palette, save_palette
+from okpalette._types import ColorLike
 
 pytestmark = pytest.mark.plot_smoke
 
 
 def _require_plot_smoke() -> None:
-    if os.environ.get("GLASBEY_RS_PLOT_SMOKE") != "1":
-        pytest.skip("set GLASBEY_RS_PLOT_SMOKE=1 to write palette preview artifacts")
+    if os.environ.get("OKPALETTE_PLOT_SMOKE") != "1":
+        pytest.skip("set OKPALETTE_PLOT_SMOKE=1 to write palette preview artifacts")
 
 
 def _output_dir() -> Path:
-    path = Path(os.environ.get("GLASBEY_RS_PLOT_SMOKE_DIR", "output/plot_smoke"))
+    path = Path(os.environ.get("OKPALETTE_PLOT_SMOKE_DIR", "output/plot_smoke"))
     path.mkdir(parents=True, exist_ok=True)
     return path
 

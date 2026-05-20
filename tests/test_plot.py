@@ -6,9 +6,9 @@ from typing import Any, Callable
 
 import pytest
 
-import glasbey_rs
-from glasbey_rs import palette_png, palette_svg, save_palette, view_palette
-from glasbey_rs import _plot
+import okpalette
+from okpalette import palette_png, palette_svg, save_palette, view_palette
+from okpalette import _plot
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -40,7 +40,7 @@ def test_palette_png_renders_png_bytes() -> None:
 def test_view_palette_is_displayable_and_saves_files(tmp_path: Path) -> None:
     view = view_palette(["#F00", "#00F"], width=20, height=6)
 
-    assert isinstance(view, glasbey_rs.PaletteView)
+    assert isinstance(view, okpalette.PaletteView)
     assert view.colors == ["#ff0000", "#0000ff"]
     assert view._repr_svg_() == view.svg()
     assert view._repr_png_() == view.png()

@@ -6,23 +6,23 @@ from typing import Any, cast
 
 import pytest
 
-import glasbey_rs
-from glasbey_rs import palette_png, palette_svg, save_palette, view_palette
-from glasbey_rs import create_palette, extend_palette
-from glasbey_rs import _format
+import okpalette
+from okpalette import palette_png, palette_svg, save_palette, view_palette
+from okpalette import create_palette, extend_palette
+from okpalette import _format
 
 
 def test_public_imports_and_exports() -> None:
-    module = import_module("glasbey_rs")
+    module = import_module("okpalette")
 
-    assert module is glasbey_rs
-    assert create_palette is glasbey_rs.create_palette
-    assert extend_palette is glasbey_rs.extend_palette
-    assert view_palette is glasbey_rs.view_palette
-    assert palette_svg is glasbey_rs.palette_svg
-    assert palette_png is glasbey_rs.palette_png
-    assert save_palette is glasbey_rs.save_palette
-    assert set(getattr(glasbey_rs, "__all__")) == {
+    assert module is okpalette
+    assert create_palette is okpalette.create_palette
+    assert extend_palette is okpalette.extend_palette
+    assert view_palette is okpalette.view_palette
+    assert palette_svg is okpalette.palette_svg
+    assert palette_png is okpalette.palette_png
+    assert save_palette is okpalette.save_palette
+    assert set(getattr(okpalette, "__all__")) == {
         "ColorFormat",
         "ColorLike",
         "GridSize",
@@ -96,7 +96,7 @@ def test_background_can_be_disabled() -> None:
 
 
 def test_native_extension_missing_error_is_actionable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(sys.modules, "glasbey_rs._core", None)
+    monkeypatch.setitem(sys.modules, "okpalette._core", None)
 
     with pytest.raises(ImportError, match="native extension is unavailable") as error:
         _format.load_generate_palette_rs()

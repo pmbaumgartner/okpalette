@@ -1,4 +1,4 @@
-"""Fast Glasbey categorical color palettes powered by Rust and OKLab."""
+"""Fast OKLab categorical color palettes powered by Rust."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from ._plot import PaletteView, palette_png, palette_svg, save_palette, view_pal
 from ._types import ColorFormat, ColorLike, GridSize, Rgb01, Rgb8
 
 try:
-    __version__ = version("glasbey-rs")
+    __version__ = version("okpalette")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
@@ -54,7 +54,7 @@ def create_palette(
     chroma_weight: float = 1.0,
     format: ColorFormat = "hex",
 ) -> Palette:
-    """Create a deterministic Glasbey palette."""
+    """Create a deterministic categorical palette."""
 
     size = validate_positive_size("palette_size", palette_size)
     output_format = validate_format(format)

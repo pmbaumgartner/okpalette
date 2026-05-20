@@ -1,4 +1,4 @@
-"""Public type aliases for glasbey_rs."""
+"""Public type aliases for okpalette."""
 
 from typing import Literal, Tuple, Union
 

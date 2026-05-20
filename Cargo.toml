@@ -1,9 +1,9 @@
 [package]
-name = "glasbey-rs"
+name = "okpalette"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Fast, dependency-free Glasbey categorical color palettes powered by Rust and OKLab"
+description = "Fast, dependency-free OKLab categorical color palettes powered by Rust"
 
 [lib]
 name = "_core"

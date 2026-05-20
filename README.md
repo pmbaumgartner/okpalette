@@ -1,11 +1,11 @@
-# glasbey-rs
+# okpalette
 
-Fast, dependency-free Glasbey categorical color palettes for Python, powered by Rust and OKLab.
+Fast, dependency-free OKLab categorical color palettes for Python, powered by Rust.
 
-`glasbey-rs` is the package name on PyPI. Import it as `glasbey_rs` in Python:
+Install and import it as `okpalette`:
 
 ```python
-from glasbey_rs import create_palette
+from okpalette import create_palette
 
 colors = create_palette(8)
 ```
@@ -16,7 +16,7 @@ extension and returns ordinary Python values.
 ## Installation
 
 ```bash
-pip install glasbey-rs
+pip install okpalette
 ```
 
 ## Basic Use
@@ -24,7 +24,7 @@ pip install glasbey-rs
 Create a categorical palette with lowercase hex colors:
 
 ```python
-from glasbey_rs import create_palette
+from okpalette import create_palette
 
 colors = create_palette(10)
 # ["#080050", "#e00800", "#1078ff", ...]
@@ -49,7 +49,7 @@ Palette previews are rendered by the Rust extension as SVG or PNG, so no plottin
 required.
 
 ```python
-from glasbey_rs import create_palette, palette_png, palette_svg, save_palette, view_palette
+from okpalette import create_palette, palette_png, palette_svg, save_palette, view_palette
 
 colors = create_palette(12)
 
@@ -70,10 +70,10 @@ Use `width` and `height` to choose another fixed output size.
 To generate local SVG and PNG files for a quick visual review, run the opt-in plotting smoke tests:
 
 ```bash
-GLASBEY_RS_PLOT_SMOKE=1 uv run --extra dev pytest tests/test_plot_smoke.py
+OKPALETTE_PLOT_SMOKE=1 uv run --extra dev pytest tests/test_plot_smoke.py
 ```
 
-The images are written to `output/plot_smoke/`. Set `GLASBEY_RS_PLOT_SMOKE_DIR` to choose another
+The images are written to `output/plot_smoke/`. Set `OKPALETTE_PLOT_SMOKE_DIR` to choose another
 directory.
 
 ## Extend Existing Colors
@@ -82,7 +82,7 @@ Use `extend_palette()` when you already have brand colors or a small palette and
 that avoid crowding the originals.
 
 ```python
-from glasbey_rs import extend_palette
+from okpalette import extend_palette
 
 brand = ["#0057b8", "#ffd700"]
 colors = extend_palette(brand, 12)
@@ -173,7 +173,7 @@ fine = create_palette(24, grid_size="fine")  # step 4
 custom = create_palette(24, grid_size=12)
 ```
 
-If constraints leave too few candidate colors, `glasbey_rs` raises `ValueError` with a hint to relax
+If constraints leave too few candidate colors, `okpalette` raises `ValueError` with a hint to relax
 `lightness`, `chroma`, `hue`, or `grid_size`.
 
 ## How It Works

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from glasbey_rs import create_palette
+from okpalette import create_palette
 
 DEFAULT_10 = [
     "#080050",

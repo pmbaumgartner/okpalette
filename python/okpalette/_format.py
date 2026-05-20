@@ -143,7 +143,7 @@ def load_generate_palette_rs() -> Any:
         from ._core import generate_palette_rs
     except ImportError as error:
         raise ImportError(
-            "glasbey_rs native extension is unavailable; install the glasbey-rs wheel "
+            "okpalette native extension is unavailable; install the okpalette wheel "
             "or run `maturin develop` in the source checkout."
         ) from error
 

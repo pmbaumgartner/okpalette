@@ -170,7 +170,7 @@ def _load_renderers() -> tuple[SvgRenderer, PngRenderer]:
         from ._core import palette_png_rs, palette_svg_rs
     except ImportError as error:
         raise ImportError(
-            "glasbey_rs native extension is unavailable; install the glasbey-rs wheel "
+            "okpalette native extension is unavailable; install the okpalette wheel "
             "or run `maturin develop` in the source checkout."
         ) from error
 

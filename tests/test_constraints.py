@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from glasbey_rs import create_palette
+from okpalette import create_palette
 
 
 @pytest.mark.parametrize("grid_size", ["coarse", "medium", "fine", 1, 16, 255])

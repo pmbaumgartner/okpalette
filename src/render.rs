@@ -7,7 +7,7 @@ pub fn render_palette_svg(colors: &[Rgb8], width: u32, height: u32) -> Result<St
     validate_render_request(colors, width, height)?;
     let mut svg = String::new();
     svg.push_str(&format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Glasbey palette" shape-rendering="crispEdges">"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Categorical palette" shape-rendering="crispEdges">"#
     ));
 
     for (index, color) in colors.iter().enumerate() {

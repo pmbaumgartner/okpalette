@@ -3,9 +3,9 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "glasbey-rs"
+name = "okpalette"
 version = "0.1.0"
-description = "Fast, dependency-free Glasbey categorical color palettes powered by Rust and OKLab"
+description = "Fast, dependency-free OKLab categorical color palettes powered by Rust"
 requires-python = ">=3.9"
 license = "MIT"
 keywords = ["color", "palette", "glasbey", "categorical", "oklab", "visualization"]
@@ -23,7 +23,7 @@ dev = [
 
 [tool.maturin]
 python-source = "python"
-module-name = "glasbey_rs._core"
+module-name = "okpalette._core"
 bindings = "pyo3"
 
 [tool.ruff]
