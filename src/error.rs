@@ -19,6 +19,9 @@ pub enum GlasbeyError {
         message: &'static str,
     },
 
+    #[error("invalid distance weights: {message}")]
+    InvalidDistanceWeights { message: &'static str },
+
     #[error(
         "only {available} candidate colors remain after applying constraints, but palette_size={requested} was requested. Try relaxing lightness, chroma, hue, or grid_size."
     )]

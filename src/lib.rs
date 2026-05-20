@@ -1,6 +1,7 @@
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 
+pub mod algorithm;
 pub mod candidates;
 pub mod color;
 pub mod error;
