@@ -1,3 +1,5 @@
+.codebase-memory/
+.kata.toml
 .kata.local.toml
 .kata/
 .docs/
