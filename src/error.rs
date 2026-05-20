@@ -9,6 +9,20 @@ pub enum GlasbeyError {
 
     #[error("invalid hex digit '{ch}' at byte {index}; expected ASCII hexadecimal digit")]
     InvalidHexDigit { index: usize, ch: char },
+
+    #[error("invalid grid step 0; grid_step must be greater than 0")]
+    InvalidGridStep,
+
+    #[error("invalid {constraint} constraint: {message}")]
+    InvalidConstraintRange {
+        constraint: &'static str,
+        message: &'static str,
+    },
+
+    #[error(
+        "only {available} candidate colors remain after applying constraints, but palette_size={requested} was requested. Try relaxing lightness, chroma, hue, or grid_size."
+    )]
+    InsufficientCandidates { available: usize, requested: usize },
 }
 
 pub type Result<T> = std::result::Result<T, GlasbeyError>;
