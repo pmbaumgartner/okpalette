@@ -67,8 +67,8 @@ ColorOut = Union[str, Rgb8, Rgb01]
 class _PaletteOptions:
     seed_colors: Sequence[ColorLike] = ()
     avoid_colors: Optional[Sequence[ColorLike]] = None
-    background: Optional[BackgroundLike] = "#ffffff"
-    background_contrast: BackgroundContrast = "normal"
+    background: Optional[BackgroundLike] = None
+    background_contrast: Optional[BackgroundContrast] = None
     lightness: Optional[Tuple[float, float]] = (0.20, 0.90)
     chroma: Optional[Tuple[Optional[float], Optional[float]]] = (0.04, None)
     hue: Optional[Tuple[float, float]] = None
@@ -82,7 +82,7 @@ class _NormalizedPaletteOptions:
     seed_hex: List[str]
     avoid_hex: List[str]
     background_hex: List[str]
-    background_distance: float
+    background_contrast: Optional[BackgroundContrast]
     lightness_bounds: Optional[Tuple[float, float]]
     chroma_bounds: Optional[Tuple[Optional[float], Optional[float]]]
     hue_bounds: Optional[Tuple[float, float]]
@@ -96,8 +96,8 @@ def create_palette(
     *,
     seed_colors: Sequence[ColorLike] = (),
     avoid_colors: Optional[Sequence[ColorLike]] = None,
-    background: Optional[BackgroundLike] = "#ffffff",
-    background_contrast: BackgroundContrast = "normal",
+    background: Optional[BackgroundLike] = None,
+    background_contrast: Optional[BackgroundContrast] = None,
     lightness: Optional[Tuple[float, float]] = (0.20, 0.90),
     chroma: Optional[Tuple[Optional[float], Optional[float]]] = (0.04, None),
     hue: Optional[Tuple[float, float]] = None,
@@ -166,8 +166,8 @@ def create_label_palette(
     fixed_colors: Optional[MappingABC[Hashable, ColorLike]] = None,
     seed_colors: Sequence[ColorLike] = (),
     avoid_colors: Optional[Sequence[ColorLike]] = None,
-    background: Optional[BackgroundLike] = "#ffffff",
-    background_contrast: BackgroundContrast = "normal",
+    background: Optional[BackgroundLike] = None,
+    background_contrast: Optional[BackgroundContrast] = None,
     lightness: Optional[Tuple[float, float]] = (0.20, 0.90),
     chroma: Optional[Tuple[Optional[float], Optional[float]]] = (0.04, None),
     hue: Optional[Tuple[float, float]] = None,
@@ -263,7 +263,7 @@ def _generate_palette_hex(
         normalized.seed_hex or None,
         normalized.avoid_hex or None,
         normalized.background_hex or None,
-        normalized.background_distance,
+        normalized.background_contrast,
         normalized.lightness_bounds,
         normalized.chroma_bounds,
         normalized.hue_bounds,
@@ -299,7 +299,7 @@ def _generate_label_palette_hex(
         normalized.seed_hex or None,
         normalized.avoid_hex or None,
         normalized.background_hex or None,
-        normalized.background_distance,
+        normalized.background_contrast,
         normalized.lightness_bounds,
         normalized.chroma_bounds,
         normalized.hue_bounds,
@@ -318,10 +318,10 @@ def _extend_palette_options(
     return _PaletteOptions(
         seed_colors=seed_colors,
         avoid_colors=cast(Optional[Sequence[ColorLike]], kwargs.get("avoid_colors")),
-        background=cast(Optional[BackgroundLike], kwargs.get("background", "#ffffff")),
+        background=cast(Optional[BackgroundLike], kwargs.get("background")),
         background_contrast=cast(
-            BackgroundContrast,
-            kwargs.get("background_contrast", "normal"),
+            Optional[BackgroundContrast],
+            kwargs.get("background_contrast"),
         ),
         lightness=cast(
             Optional[Tuple[float, float]],
@@ -341,8 +341,17 @@ def _extend_palette_options(
 def _normalize_palette_options(options: _PaletteOptions) -> _NormalizedPaletteOptions:
     seed_hex = normalize_color_sequence(options.seed_colors, "seed_colors")
     avoid_hex = normalize_color_sequence(options.avoid_colors, "avoid_colors")
-    background_hex = normalize_background_colors(options.background, "background")
-    background_distance = validate_background_contrast(options.background_contrast)
+    background_contrast = validate_background_contrast(options.background_contrast)
+    if options.background is None:
+        if background_contrast is not None:
+            raise ValueError("background must be provided when background_contrast is set")
+        background_hex: List[str] = []
+    else:
+        if background_contrast is None:
+            raise ValueError("background_contrast must be provided when background is set")
+        background_hex = normalize_background_colors(options.background, "background")
+        if not background_hex:
+            raise ValueError("background must contain at least one color")
     lightness_bounds = validate_lightness(options.lightness)
     chroma_bounds = validate_chroma(options.chroma)
     hue_bounds = validate_hue(options.hue)
@@ -355,7 +364,7 @@ def _normalize_palette_options(options: _PaletteOptions) -> _NormalizedPaletteOp
         seed_hex=seed_hex,
         avoid_hex=avoid_hex,
         background_hex=background_hex,
-        background_distance=background_distance,
+        background_contrast=background_contrast,
         lightness_bounds=lightness_bounds,
         chroma_bounds=chroma_bounds,
         hue_bounds=hue_bounds,

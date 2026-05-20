@@ -21,7 +21,7 @@ Palette = Union[List[str], List[Rgb8], List[Rgb01]]
 _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
 _FORMATS = {"hex", "rgb", "rgb01"}
-_BACKGROUND_CONTRASTS = {"normal": 0.006, "high": 0.016}
+_BACKGROUND_CONTRASTS = {"normal", "high", "wcag"}
 
 
 def normalize_color(color: ColorLike) -> str:
@@ -110,11 +110,14 @@ def validate_format(output_format: object) -> ColorFormat:
     return cast(ColorFormat, output_format)
 
 
-def validate_background_contrast(value: object) -> float:
-    if value not in _BACKGROUND_CONTRASTS:
-        raise ValueError("background_contrast must be 'normal' or 'high'")
+def validate_background_contrast(value: object) -> Optional[BackgroundContrast]:
+    if value is None:
+        return None
 
-    return _BACKGROUND_CONTRASTS[cast(BackgroundContrast, value)]
+    if value not in _BACKGROUND_CONTRASTS:
+        raise ValueError("background_contrast must be None, 'normal', 'high', or 'wcag'")
+
+    return cast(BackgroundContrast, value)
 
 
 def validate_lightness(value: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:

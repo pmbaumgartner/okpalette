@@ -89,11 +89,11 @@ def test_extend_palette_can_return_only_generated_colors() -> None:
     assert "#00ff00" not in palette
 
 
-def test_default_background_excludes_white_when_white_is_on_grid() -> None:
+def test_default_background_is_unconstrained_when_white_is_on_grid() -> None:
     palette = create_palette(7, grid_size=255, lightness=None, chroma=None)
 
     assert len(palette) == 7
-    assert "#ffffff" not in palette
+    assert "#ffffff" in palette
 
 
 def test_background_can_be_disabled() -> None:

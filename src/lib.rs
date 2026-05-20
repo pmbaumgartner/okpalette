@@ -14,6 +14,7 @@ pub(crate) mod test_support;
 use algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
 use candidates::{
     generate_candidates_with_background_filter, BackgroundFilter, CandidateConstraints, GridSize,
+    NORMAL_BACKGROUND_DISTANCE_SQUARED, WCAG_NON_TEXT_CONTRAST_RATIO,
 };
 use color::Rgb8;
 use error::GlasbeyError;
@@ -28,7 +29,7 @@ use render::{render_palette_png, render_palette_svg};
     seed_colors = None,
     avoid_colors = None,
     backgrounds = None,
-    background_min_distance_squared = None,
+    background_contrast = None,
     lightness = None,
     chroma = None,
     hue = None,
@@ -43,7 +44,7 @@ fn generate_palette_rs(
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
     backgrounds: Option<Vec<String>>,
-    background_min_distance_squared: Option<f32>,
+    background_contrast: Option<String>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -57,7 +58,7 @@ fn generate_palette_rs(
             seed_colors,
             avoid_colors,
             backgrounds,
-            background_min_distance_squared,
+            background_contrast,
             lightness,
             chroma,
             hue,
@@ -75,7 +76,7 @@ fn generate_palette_inner(
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
     backgrounds: Option<Vec<String>>,
-    background_min_distance_squared: Option<f32>,
+    background_contrast: Option<String>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -86,7 +87,6 @@ fn generate_palette_inner(
     let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
     let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
     let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
-    let background_labs: Vec<_> = backgrounds.iter().map(|color| color.to_oklab()).collect();
     let constraints = CandidateConstraints {
         lightness,
         chroma,
@@ -97,14 +97,13 @@ fn generate_palette_inner(
         chroma: chroma_weight,
     };
     weights.validate()?;
+    let background_filter =
+        background_filter_from_mode(&backgrounds, background_contrast.as_deref(), weights)?;
+    background_filter.validate_user_colors("seed_colors", &seed_colors)?;
     let candidates = generate_candidates_with_background_filter(
         GridSize::Step(grid_step),
         constraints,
-        BackgroundFilter {
-            backgrounds: &background_labs,
-            min_distance_squared: background_min_distance_squared,
-            weights,
-        },
+        background_filter,
         palette_size,
     )?;
     let palette = select_palette(
@@ -133,7 +132,7 @@ fn generate_palette_inner(
     seed_colors = None,
     avoid_colors = None,
     backgrounds = None,
-    background_min_distance_squared = None,
+    background_contrast = None,
     lightness = None,
     chroma = None,
     hue = None,
@@ -154,7 +153,7 @@ fn generate_label_palette_rs(
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
     backgrounds: Option<Vec<String>>,
-    background_min_distance_squared: Option<f32>,
+    background_contrast: Option<String>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -174,7 +173,7 @@ fn generate_label_palette_rs(
             seed_colors,
             avoid_colors,
             backgrounds,
-            background_min_distance_squared,
+            background_contrast,
             lightness,
             chroma,
             hue,
@@ -198,7 +197,7 @@ fn generate_label_palette_inner(
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
     backgrounds: Option<Vec<String>>,
-    background_min_distance_squared: Option<f32>,
+    background_contrast: Option<String>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -215,7 +214,6 @@ fn generate_label_palette_inner(
     let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
     let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
     let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
-    let background_labs: Vec<_> = backgrounds.iter().map(|color| color.to_oklab()).collect();
     let constraints = CandidateConstraints {
         lightness,
         chroma,
@@ -225,6 +223,11 @@ fn generate_label_palette_inner(
         lightness: lightness_weight,
         chroma: chroma_weight,
     };
+    let background_filter =
+        background_filter_from_mode(&backgrounds, background_contrast.as_deref(), weights)?;
+    background_filter.validate_user_colors("seed_colors", &seed_colors)?;
+    let fixed_anchor_colors: Vec<Rgb8> = fixed_colors.iter().flatten().copied().collect();
+    background_filter.validate_user_colors("fixed_colors", &fixed_anchor_colors)?;
 
     let palette = select_label_palette(LabelPaletteOptions {
         coordinates: &coordinates,
@@ -233,11 +236,7 @@ fn generate_label_palette_inner(
         label_count,
         fixed_colors: &fixed_colors,
         constraints,
-        background_filter: BackgroundFilter {
-            backgrounds: &background_labs,
-            min_distance_squared: background_min_distance_squared,
-            weights,
-        },
+        background_filter,
         grid_size: GridSize::Step(grid_step),
         anchors: PaletteAnchors {
             seed_colors: &seed_colors,
@@ -257,6 +256,37 @@ fn parse_hex_colors(colors: Vec<String>) -> Result<Vec<Rgb8>, GlasbeyError> {
         .into_iter()
         .map(|color| parse_hex_color(&color))
         .collect()
+}
+
+fn background_filter_from_mode<'a>(
+    backgrounds: &'a [Rgb8],
+    background_contrast: Option<&str>,
+    weights: DistanceWeights,
+) -> Result<BackgroundFilter<'a>, GlasbeyError> {
+    match (backgrounds.is_empty(), background_contrast) {
+        (true, None) => Ok(BackgroundFilter::None),
+        (false, None) => Err(GlasbeyError::InvalidConstraintRange {
+            constraint: "background_contrast",
+            message: "must be provided when background is set",
+        }),
+        (true, Some(_)) => Err(GlasbeyError::InvalidConstraintRange {
+            constraint: "background",
+            message: "must contain at least one color when background_contrast is set",
+        }),
+        (false, Some("normal")) => Ok(BackgroundFilter::NormalOklabDistance {
+            backgrounds,
+            min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
+            weights,
+        }),
+        (false, Some("high" | "wcag")) => Ok(BackgroundFilter::WcagNonTextContrast {
+            backgrounds,
+            min_ratio: WCAG_NON_TEXT_CONTRAST_RATIO,
+        }),
+        (false, Some(_)) => Err(GlasbeyError::InvalidConstraintRange {
+            constraint: "background_contrast",
+            message: "must be 'normal', 'high', 'wcag', or None",
+        }),
+    }
 }
 
 #[pyfunction]
@@ -304,7 +334,7 @@ mod tests {
             Some(vec!["#f00".to_owned()]),
             None,
             Some(vec!["#fff".to_owned()]),
-            Some(0.006),
+            Some("normal".to_owned()),
             Some((0.2, 0.9)),
             Some((Some(0.04), None)),
             None,
@@ -352,6 +382,33 @@ mod tests {
                 requested: 9
             }
         );
+    }
+
+    #[test]
+    fn native_bridge_rejects_high_contrast_seed_failures() {
+        let error = generate_palette_inner(
+            1,
+            Some(vec!["#ffffff".to_owned()]),
+            None,
+            Some(vec!["#ffffff".to_owned()]),
+            Some("high".to_owned()),
+            None,
+            None,
+            None,
+            255,
+            1.0,
+            1.0,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            GlasbeyError::InsufficientBackgroundContrast {
+                role: "seed_colors",
+                ..
+            }
+        ));
+        assert!(error.to_string().contains("#ffffff"));
     }
 
     #[test]

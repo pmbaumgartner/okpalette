@@ -94,23 +94,27 @@ def test_label_palette_position_review_artifact_is_written() -> None:
     _require_plot_smoke()
 
     positions, labels = _label_smoke_dataset_2d()
+    first_seen = first_seen_label_palette(
+        labels,
+        grid_size=32,
+    )
     position_aware = raw_label_palette(
         positions,
         labels,
         grid_size=32,
-        background=MATPLOTLIB_3D_PANE_COLORS,
-        background_contrast="high",
         max_points=None,
     )
-    naive = first_seen_label_palette(
+    position_aware_wcag = raw_label_palette(
+        positions,
         labels,
         grid_size=32,
         background=MATPLOTLIB_3D_PANE_COLORS,
-        background_contrast="high",
+        background_contrast="wcag",
+        max_points=None,
     )
 
-    assert set(position_aware.values()) == set(naive.values())
-    assert not set(position_aware.values()) & set(MATPLOTLIB_3D_PANE_COLORS)
+    assert set(position_aware.values()) == set(first_seen.values())
+    assert not set(position_aware_wcag.values()) & set(MATPLOTLIB_3D_PANE_COLORS)
 
     output_dir = _output_dir()
     comparison_svg, comparison_png = _save_label_scatter_comparison(
@@ -118,8 +122,9 @@ def test_label_palette_position_review_artifact_is_written() -> None:
         positions,
         labels,
         [
-            ("position-aware", position_aware),
-            ("first-seen palette", naive),
+            ("First seen (default)", first_seen),
+            ("Position aware", position_aware),
+            ("Position aware + WCAG", position_aware_wcag),
         ],
     )
     swatch_svg, swatch_png = _save_review_images(
@@ -139,31 +144,36 @@ def test_label_palette_3d_position_review_artifact_is_written() -> None:
     _require_plot_smoke()
 
     positions, labels = _label_smoke_dataset_3d()
+    first_seen = first_seen_label_palette(
+        labels,
+        grid_size=32,
+    )
     position_aware = raw_label_palette(
         positions,
         labels,
         grid_size=32,
-        background=MATPLOTLIB_3D_PANE_COLORS,
-        background_contrast="high",
         max_points=None,
     )
-    first_seen = first_seen_label_palette(
+    position_aware_wcag = raw_label_palette(
+        positions,
         labels,
         grid_size=32,
         background=MATPLOTLIB_3D_PANE_COLORS,
-        background_contrast="high",
+        background_contrast="wcag",
+        max_points=None,
     )
 
     assert set(position_aware.values()) == set(first_seen.values())
-    assert not set(position_aware.values()) & set(MATPLOTLIB_3D_PANE_COLORS)
+    assert not set(position_aware_wcag.values()) & set(MATPLOTLIB_3D_PANE_COLORS)
 
     comparison_svg, comparison_png = _save_label_scatter_3d_comparison(
         _output_dir() / "label-position-aware-50-labels-3d",
         positions,
         labels,
         [
-            ("position-aware", position_aware),
-            ("first-seen palette", first_seen),
+            ("First seen (default)", first_seen),
+            ("Position aware", position_aware),
+            ("Position aware + WCAG", position_aware_wcag),
         ],
     )
 
@@ -218,7 +228,13 @@ def _save_label_scatter_comparison(
 
     x_values = [x for x, _ in positions]
     y_values = [y for _, y in positions]
-    fig, axes = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True)
+    fig, axes = plt.subplots(
+        1,
+        len(palettes),
+        figsize=(7 * len(palettes), 7),
+        sharex=True,
+        sharey=True,
+    )
     fig.suptitle("Position-aware label palette smoke test: 100 overlapping labels, 1000 points")
 
     for axis, (title, palette) in zip(axes, palettes):
@@ -251,11 +267,11 @@ def _save_label_scatter_3d_comparison(
     x_values = [x for x, _, _ in positions]
     y_values = [y for _, y, _ in positions]
     z_values = [z for _, _, z in positions]
-    fig = plt.figure(figsize=(14, 7))
+    fig = plt.figure(figsize=(7 * len(palettes), 7))
     fig.suptitle("Position-aware label palette smoke test: 3D, 50 overlapping labels, 500 points")
 
     for index, (title, palette) in enumerate(palettes, start=1):
-        axis = cast(Any, fig.add_subplot(1, 2, index, projection="3d"))
+        axis = cast(Any, fig.add_subplot(1, len(palettes), index, projection="3d"))
         colors = [palette[label] for label in labels]
         axis.scatter(x_values, y_values, z_values, c=colors, s=20, alpha=0.88, linewidths=0)
         axis.set_title(title)

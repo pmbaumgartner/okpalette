@@ -145,16 +145,29 @@ def test_label_palette_preserves_palette_set_with_background_contrast(
         labels,
         background=["#ffffff", "#000000"],
         background_contrast="high",
+        grid_size=32,
     )
     first_seen = first_seen_label_palette(
         labels,
         background=["#ffffff", "#000000"],
         background_contrast="high",
+        grid_size=32,
     )
 
     assert set(position_aware.values()) == set(first_seen.values())
     assert "#ffffff" not in position_aware.values()
     assert "#000000" not in position_aware.values()
+
+
+def test_high_background_contrast_rejects_failing_fixed_color() -> None:
+    with pytest.raises(ValueError, match=r"fixed_colors color #ffffff.*background #ffffff"):
+        raw_label_palette(
+            [(0.0, 0.0)],
+            ["a"],
+            fixed_colors={"a": "#ffffff"},
+            background="#ffffff",
+            background_contrast="high",
+        )
 
 
 def _fixture_quality(mapping: Mapping[str, str]) -> float:

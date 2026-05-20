@@ -34,12 +34,14 @@ def test_small_valid_palettes_are_unique_hex_and_deterministic(
     lightness: tuple[float, float] | None,
     chroma: tuple[float | None, float | None] | None,
 ) -> None:
+    background_contrast = None if background is None else "normal"
     first = cast(
         list[str],
         create_palette(
             palette_size,
             grid_size=grid_size,
             background=background,
+            background_contrast=background_contrast,
             lightness=lightness,
             chroma=chroma,
         ),
@@ -48,6 +50,7 @@ def test_small_valid_palettes_are_unique_hex_and_deterministic(
         palette_size,
         grid_size=grid_size,
         background=background,
+        background_contrast=background_contrast,
         lightness=lightness,
         chroma=chroma,
     )

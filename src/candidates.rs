@@ -1,6 +1,9 @@
 use crate::algorithm::DistanceWeights;
-use crate::color::{Oklab, Rgb8};
+use crate::color::{wcag_contrast_ratio, Oklab, Rgb8};
 use crate::error::{GlasbeyError, Result};
+
+pub const NORMAL_BACKGROUND_DISTANCE_SQUARED: f32 = 0.006;
+pub const WCAG_NON_TEXT_CONTRAST_RATIO: f64 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Candidate {
@@ -39,10 +42,18 @@ pub struct CandidateConstraints {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct BackgroundFilter<'a> {
-    pub backgrounds: &'a [Oklab],
-    pub min_distance_squared: Option<f32>,
-    pub weights: DistanceWeights,
+pub enum BackgroundFilter<'a> {
+    #[default]
+    None,
+    NormalOklabDistance {
+        backgrounds: &'a [Rgb8],
+        min_distance_squared: f32,
+        weights: DistanceWeights,
+    },
+    WcagNonTextContrast {
+        backgrounds: &'a [Rgb8],
+        min_ratio: f64,
+    },
 }
 
 impl GridSize {
@@ -89,7 +100,7 @@ pub fn generate_candidates_with_background_filter(
                 let rgb = Rgb8 { r, g, b };
                 let candidate = Candidate::from_rgb(rgb);
 
-                if constraints.allows(candidate) && background_filter.allows(candidate.lab) {
+                if constraints.allows(candidate) && background_filter.allows(candidate) {
                     candidates.push(candidate);
                 }
             }
@@ -107,27 +118,82 @@ pub fn generate_candidates_with_background_filter(
 }
 
 impl BackgroundFilter<'_> {
-    fn validate(self) -> Result<()> {
-        if let Some(min_distance_squared) = self.min_distance_squared {
-            if !min_distance_squared.is_finite() || min_distance_squared < 0.0 {
-                return Err(GlasbeyError::InvalidConstraintRange {
-                    constraint: "background",
-                    message: "contrast distance must be finite and greater than or equal to zero",
-                });
+    pub(crate) fn validate(self) -> Result<()> {
+        match self {
+            Self::None => Ok(()),
+            Self::NormalOklabDistance {
+                min_distance_squared,
+                weights,
+                ..
+            } => {
+                if !min_distance_squared.is_finite() || min_distance_squared < 0.0 {
+                    return Err(GlasbeyError::InvalidConstraintRange {
+                        constraint: "background",
+                        message:
+                            "contrast distance must be finite and greater than or equal to zero",
+                    });
+                }
+
+                weights.validate()
+            }
+            Self::WcagNonTextContrast { min_ratio, .. } => {
+                if !min_ratio.is_finite() || min_ratio <= 0.0 {
+                    return Err(GlasbeyError::InvalidConstraintRange {
+                        constraint: "background_contrast",
+                        message: "WCAG contrast ratio must be finite and greater than zero",
+                    });
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    fn allows(self, candidate: Candidate) -> bool {
+        match self {
+            Self::None => true,
+            Self::NormalOklabDistance {
+                backgrounds,
+                min_distance_squared,
+                weights,
+            } => backgrounds.iter().all(|&background| {
+                weights.oklab_distance_squared(candidate.lab, background.to_oklab())
+                    >= min_distance_squared
+            }),
+            Self::WcagNonTextContrast {
+                backgrounds,
+                min_ratio,
+            } => backgrounds
+                .iter()
+                .all(|&background| wcag_contrast_ratio(candidate.rgb, background) >= min_ratio),
+        }
+    }
+
+    pub(crate) fn validate_user_colors(self, role: &'static str, colors: &[Rgb8]) -> Result<()> {
+        let Self::WcagNonTextContrast {
+            backgrounds,
+            min_ratio,
+        } = self
+        else {
+            return Ok(());
+        };
+
+        for &color in colors {
+            for &background in backgrounds {
+                let ratio = wcag_contrast_ratio(color, background);
+                if ratio < min_ratio {
+                    return Err(GlasbeyError::InsufficientBackgroundContrast {
+                        role,
+                        color: color.to_hex(),
+                        background: background.to_hex(),
+                        ratio,
+                        required: min_ratio,
+                    });
+                }
             }
         }
 
-        self.weights.validate()
-    }
-
-    fn allows(self, lab: Oklab) -> bool {
-        let Some(min_distance_squared) = self.min_distance_squared else {
-            return true;
-        };
-
-        self.backgrounds.iter().all(|&background| {
-            self.weights.oklab_distance_squared(lab, background) >= min_distance_squared
-        })
+        Ok(())
     }
 }
 
@@ -432,14 +498,14 @@ mod tests {
 
     #[test]
     fn filters_by_background_contrast_distance() {
-        let background = rgb(255, 255, 255).to_oklab();
+        let backgrounds = [rgb(255, 255, 255)];
         let candidates = generate_candidates_with_background_filter(
             GridSize::Step(255),
             CandidateConstraints::default(),
-            BackgroundFilter {
-                backgrounds: &[background],
-                min_distance_squared: Some(0.006),
-                ..BackgroundFilter::default()
+            BackgroundFilter::NormalOklabDistance {
+                backgrounds: &backgrounds,
+                min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
+                weights: DistanceWeights::default(),
             },
             0,
         )
@@ -452,14 +518,14 @@ mod tests {
 
     #[test]
     fn background_filter_can_apply_multiple_backgrounds() {
-        let backgrounds = [rgb(255, 255, 255).to_oklab(), rgb(0, 0, 0).to_oklab()];
+        let backgrounds = [rgb(255, 255, 255), rgb(0, 0, 0)];
         let candidates = generate_candidates_with_background_filter(
             GridSize::Step(255),
             CandidateConstraints::default(),
-            BackgroundFilter {
+            BackgroundFilter::NormalOklabDistance {
                 backgrounds: &backgrounds,
-                min_distance_squared: Some(0.006),
-                ..BackgroundFilter::default()
+                min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
+                weights: DistanceWeights::default(),
             },
             0,
         )
@@ -468,6 +534,26 @@ mod tests {
 
         assert!(!rgbs.contains(&rgb(255, 255, 255)));
         assert!(!rgbs.contains(&rgb(0, 0, 0)));
+    }
+
+    #[test]
+    fn filters_by_wcag_non_text_contrast() {
+        let backgrounds = [rgb(255, 255, 255)];
+        let candidates = generate_candidates_with_background_filter(
+            GridSize::Step(255),
+            CandidateConstraints::default(),
+            BackgroundFilter::WcagNonTextContrast {
+                backgrounds: &backgrounds,
+                min_ratio: WCAG_NON_TEXT_CONTRAST_RATIO,
+            },
+            0,
+        )
+        .unwrap();
+        let rgbs = rgb_values(&candidates);
+
+        assert!(!rgbs.contains(&rgb(255, 255, 255)));
+        assert!(!rgbs.contains(&rgb(255, 255, 0)));
+        assert!(rgbs.contains(&rgb(0, 0, 255)));
     }
 
     #[test]

@@ -6,7 +6,7 @@ Rgb8 = Tuple[int, int, int]
 Rgb01 = Tuple[float, float, float]
 ColorLike = Union[str, Rgb8, Rgb01]
 BackgroundLike = Union[ColorLike, Sequence[ColorLike]]
-BackgroundContrast = Literal["normal", "high"]
+BackgroundContrast = Literal["normal", "high", "wcag"]
 ColorFormat = Literal["hex", "rgb", "rgb01"]
 GridSize = Union[Literal["coarse", "medium", "fine"], int]
 

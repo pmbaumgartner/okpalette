@@ -45,6 +45,21 @@ impl Rgb8 {
     }
 }
 
+pub fn relative_luminance_srgb(rgb: Rgb8) -> f64 {
+    0.2126 * srgb_channel_to_linear_f64(rgb.r)
+        + 0.7152 * srgb_channel_to_linear_f64(rgb.g)
+        + 0.0722 * srgb_channel_to_linear_f64(rgb.b)
+}
+
+pub fn wcag_contrast_ratio(left: Rgb8, right: Rgb8) -> f64 {
+    let left_luminance = relative_luminance_srgb(left);
+    let right_luminance = relative_luminance_srgb(right);
+    let light = left_luminance.max(right_luminance);
+    let dark = left_luminance.min(right_luminance);
+
+    (light + 0.05) / (dark + 0.05)
+}
+
 impl Oklab {
     pub fn to_oklch(self) -> Oklch {
         Oklch {
@@ -64,12 +79,28 @@ fn srgb_channel_to_linear(channel: u8) -> f32 {
     }
 }
 
+fn srgb_channel_to_linear_f64(channel: u8) -> f64 {
+    let value = f64::from(channel) / 255.0;
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::{lab, rgb};
 
     fn assert_approx(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() <= 0.000_01,
+            "expected {actual} to be within tolerance of {expected}"
+        );
+    }
+
+    fn assert_approx_f64(actual: f64, expected: f64) {
         assert!(
             (actual - expected).abs() <= 0.000_01,
             "expected {actual} to be within tolerance of {expected}"
@@ -117,5 +148,22 @@ mod tests {
     fn formats_lowercase_hex() {
         assert_eq!(rgb(0, 15, 170).to_hex(), "#000faa");
         assert_eq!(rgb(255, 128, 1).to_hex(), "#ff8001");
+    }
+
+    #[test]
+    fn computes_relative_luminance_snapshots() {
+        assert_approx_f64(relative_luminance_srgb(rgb(0, 0, 0)), 0.0);
+        assert_approx_f64(relative_luminance_srgb(rgb(255, 255, 255)), 1.0);
+        assert_approx_f64(relative_luminance_srgb(rgb(127, 127, 127)), 0.212_231);
+    }
+
+    #[test]
+    fn computes_wcag_contrast_ratio_snapshots() {
+        assert_approx_f64(wcag_contrast_ratio(rgb(0, 0, 0), rgb(255, 255, 255)), 21.0);
+        assert_approx_f64(wcag_contrast_ratio(rgb(255, 0, 0), rgb(255, 0, 0)), 1.0);
+        assert_approx_f64(
+            wcag_contrast_ratio(rgb(255, 255, 255), rgb(0, 0, 0)),
+            wcag_contrast_ratio(rgb(0, 0, 0), rgb(255, 255, 255)),
+        );
     }
 }

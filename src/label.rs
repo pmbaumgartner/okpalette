@@ -42,6 +42,13 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
         .filter(|color| color.is_some())
         .count();
     let generated_count = options.label_count - fixed_count;
+    options
+        .background_filter
+        .validate_user_colors("seed_colors", options.anchors.seed_colors)?;
+    let fixed_anchor_colors: Vec<Rgb8> = options.fixed_colors.iter().flatten().copied().collect();
+    options
+        .background_filter
+        .validate_user_colors("fixed_colors", &fixed_anchor_colors)?;
     let graph = build_label_graph(options)?;
 
     if generated_count == 0 {
@@ -54,7 +61,6 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
 
     options.weights.validate()?;
 
-    let fixed_anchor_colors: Vec<Rgb8> = options.fixed_colors.iter().flatten().copied().collect();
     let seed_anchor_colors: Vec<Rgb8> = options
         .anchors
         .seed_colors
@@ -192,6 +198,31 @@ mod tests {
 
         assert_eq!(palette.len(), 3);
         assert_eq!(palette[1], rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn high_background_contrast_rejects_failing_fixed_colors() {
+        let coordinates = [0.0, 0.0];
+        let labels = [0];
+        let fixed = [Some(rgb(255, 255, 255))];
+        let backgrounds = [rgb(255, 255, 255)];
+        let options = LabelPaletteOptions {
+            background_filter: BackgroundFilter::WcagNonTextContrast {
+                backgrounds: &backgrounds,
+                min_ratio: crate::candidates::WCAG_NON_TEXT_CONTRAST_RATIO,
+            },
+            ..base_options(&coordinates, &labels, 1, &fixed)
+        };
+        let error = select_label_palette(options).unwrap_err();
+
+        assert!(matches!(
+            error,
+            GlasbeyError::InsufficientBackgroundContrast {
+                role: "fixed_colors",
+                ..
+            }
+        ));
+        assert!(error.to_string().contains("#ffffff"));
     }
 
     #[test]

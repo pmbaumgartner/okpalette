@@ -103,9 +103,11 @@ colors = create_label_palette_from_columns(
 
 ## Tune Appearance
 
-By default, white is treated as a background color. Use
-`background_contrast="high"` when plotting against pale panes or figure
-backgrounds.
+By default, palettes are generated without a background constraint. Pass both
+`background` and `background_contrast` when you want colors separated from a
+known plotting background. Use `"normal"` for the OKLab background-separation
+heuristic, or `"high"` / `"wcag"` for WCAG 2.2 non-text contrast of at least
+`3.0:1` against every configured background color.
 
 ```python
 colors = create_palette(
@@ -117,10 +119,10 @@ colors = create_palette(
 )
 ```
 
-Allow white when you need it:
+Leave background filtering off:
 
 ```python
-colors = create_palette(8, background=None, lightness=None, chroma=None)
+colors = create_palette(8, lightness=None, chroma=None)
 ```
 
 Avoid other colors:
@@ -135,8 +137,8 @@ colors = create_palette(
 ```
 
 `background` accepts one color or a sequence of colors and filters candidates
-too close to those backgrounds. `avoid_colors` keeps exact colors out of the
-palette and uses them as distance anchors.
+against those backgrounds. `avoid_colors` keeps exact colors out of the palette
+and uses them as distance anchors.
 
 Limit hue ranges:
 
@@ -215,8 +217,8 @@ create_palette(
     *,
     seed_colors=(),
     avoid_colors=None,
-    background="#ffffff",
-    background_contrast="normal",
+    background=None,
+    background_contrast=None,
     lightness=(0.20, 0.90),
     chroma=(0.04, None),
     hue=None,
@@ -245,8 +247,8 @@ create_label_palette(
     fixed_colors=None,
     seed_colors=(),
     avoid_colors=None,
-    background="#ffffff",
-    background_contrast="normal",
+    background=None,
+    background_contrast=None,
     lightness=(0.20, 0.90),
     chroma=(0.04, None),
     hue=None,
