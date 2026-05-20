@@ -14,7 +14,7 @@ pytestmark = pytest.mark.plot_smoke
 
 def _require_plot_smoke() -> None:
     if os.environ.get("OKPALETTE_PLOT_SMOKE") != "1":
-        pytest.skip("set OKPALETTE_PLOT_SMOKE=1 to write palette preview artifacts")
+        pytest.skip(reason="set OKPALETTE_PLOT_SMOKE=1 to write palette preview artifacts")
 
 
 def _output_dir() -> Path:
