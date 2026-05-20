@@ -1,6 +1,10 @@
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 
+pub mod color;
+pub mod error;
+pub mod parse;
+
 const SCAFFOLD_MESSAGE: &str =
     "generate_palette_rs is scaffolded; palette generation is implemented in follow-up issues";
 
