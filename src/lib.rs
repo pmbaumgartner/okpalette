@@ -164,4 +164,18 @@ mod tests {
 
         assert!(matches!(error, GlasbeyError::InvalidHexLength { .. }));
     }
+
+    #[test]
+    fn native_bridge_reports_insufficient_candidates() {
+        let error = generate_palette_inner(9, None, None, None, None, None, None, 255, 1.0, 1.0)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            GlasbeyError::InsufficientCandidates {
+                available: 8,
+                requested: 9
+            }
+        );
+    }
 }
