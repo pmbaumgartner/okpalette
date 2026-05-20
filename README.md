@@ -63,14 +63,55 @@ Use existing colors as anchors without returning them:
 new_colors = extend_palette(brand, 10, include_existing=False)
 ```
 
+## Map Labels To Colors
+
+Use `create_label_palette()` when positions should influence which label gets
+which color. Nearby or overlapping labels are assigned more distinct colors.
+
+```python
+from okpalette import create_label_palette
+
+positions = [(0.0, 0.0), (0.2, 0.0), (5.0, 0.0), (5.2, 0.0)]
+labels = ["control", "treated", "control", "outlier"]
+
+colors = create_label_palette(positions, labels)
+# {"control": "#080050", "treated": "#e00800", "outlier": ...}
+```
+
+Labels may be strings, integers, tuples, or other hashable Python objects. The
+returned dict preserves first-seen label order.
+
+Keep specific label colors fixed:
+
+```python
+colors = create_label_palette(
+    positions,
+    labels,
+    fixed_colors={"control": "#0057b8"},
+)
+```
+
+For dataframe-like objects, read position and label columns by duck typing:
+
+```python
+colors = create_label_palette_from_columns(
+    data,
+    positions=["x", "y"],
+    label="cluster",
+)
+```
+
 ## Tune Appearance
 
-By default, white is treated as a background color to avoid.
+By default, white is treated as a background color. Use
+`background_contrast="high"` when plotting against pale panes or figure
+backgrounds.
 
 ```python
 colors = create_palette(
     32,
     background="#ffffff",
+    background_contrast="normal",
     lightness=(0.20, 0.75),
     chroma=(0.05, None),
 )
@@ -88,9 +129,14 @@ Avoid other colors:
 colors = create_palette(
     16,
     avoid_colors=["#000000"],
-    background="#ffffff",
+    background=["#ffffff", "#f2f2f2"],
+    background_contrast="high",
 )
 ```
+
+`background` accepts one color or a sequence of colors and filters candidates
+too close to those backgrounds. `avoid_colors` keeps exact colors out of the
+palette and uses them as distance anchors.
 
 Limit hue ranges:
 
@@ -170,6 +216,7 @@ create_palette(
     seed_colors=(),
     avoid_colors=None,
     background="#ffffff",
+    background_contrast="normal",
     lightness=(0.20, 0.90),
     chroma=(0.04, None),
     hue=None,
@@ -191,6 +238,32 @@ extend_palette(
 ```
 
 ```python
+create_label_palette(
+    positions,
+    labels,
+    *,
+    fixed_colors=None,
+    seed_colors=(),
+    avoid_colors=None,
+    background="#ffffff",
+    background_contrast="normal",
+    lightness=(0.20, 0.90),
+    chroma=(0.04, None),
+    hue=None,
+    grid_size="medium",
+    lightness_weight=1.0,
+    chroma_weight=1.0,
+    neighbors=8,
+    max_points=50_000,
+    format="hex",
+)
+```
+
+```python
+create_label_palette_from_columns(data, *, positions, label, **create_label_palette_options)
+```
+
+```python
 view_palette(palette, *, width=1246, height=154)
 palette_svg(palette, *, width=1246, height=154)
 palette_png(palette, *, width=1246, height=154)
@@ -205,6 +278,11 @@ candidate color that is farthest from the nearest anchor or selected color.
 
 Distances are measured in OKLab. Lightness, chroma, and hue constraints are
 applied through OKLab and OKLCH before colors are selected.
+
+For label palettes, `okpalette` builds a weighted label-neighborhood graph from
+the input positions, then uses that graph while choosing and assigning colors.
+The default `max_points=50_000` bounds graph construction for large datasets;
+use `max_points=None` to opt into all-points preprocessing.
 
 The result is deterministic, fast, and stable when extending a palette. It is
 not a global optimizer.

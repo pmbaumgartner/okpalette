@@ -5,13 +5,17 @@ pub mod algorithm;
 pub mod candidates;
 pub mod color;
 pub mod error;
+pub mod label;
 pub mod parse;
 pub mod render;
 
 use algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
-use candidates::{generate_candidates, CandidateConstraints, GridSize};
+use candidates::{
+    generate_candidates_with_background_filter, BackgroundFilter, CandidateConstraints, GridSize,
+};
 use color::Rgb8;
 use error::GlasbeyError;
+use label::{select_label_palette, LabelPaletteOptions};
 use parse::parse_hex_color;
 use pyo3::types::PyBytes;
 use render::{render_palette_png, render_palette_svg};
@@ -21,7 +25,8 @@ use render::{render_palette_png, render_palette_svg};
     palette_size,
     seed_colors = None,
     avoid_colors = None,
-    background = None,
+    backgrounds = None,
+    background_min_distance_squared = None,
     lightness = None,
     chroma = None,
     hue = None,
@@ -35,7 +40,8 @@ fn generate_palette_rs(
     palette_size: usize,
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
-    background: Option<String>,
+    backgrounds: Option<Vec<String>>,
+    background_min_distance_squared: Option<f32>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -48,7 +54,8 @@ fn generate_palette_rs(
             palette_size,
             seed_colors,
             avoid_colors,
-            background,
+            backgrounds,
+            background_min_distance_squared,
             lightness,
             chroma,
             hue,
@@ -65,7 +72,8 @@ fn generate_palette_inner(
     palette_size: usize,
     seed_colors: Option<Vec<String>>,
     avoid_colors: Option<Vec<String>>,
-    background: Option<String>,
+    backgrounds: Option<Vec<String>>,
+    background_min_distance_squared: Option<f32>,
     lightness: Option<(f32, f32)>,
     chroma: Option<(Option<f32>, Option<f32>)>,
     hue: Option<(f32, f32)>,
@@ -75,13 +83,29 @@ fn generate_palette_inner(
 ) -> Result<Vec<String>, GlasbeyError> {
     let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
     let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
-    let background = background.as_deref().map(parse_hex_color).transpose()?;
+    let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
+    let background_labs: Vec<_> = backgrounds.iter().map(|color| color.to_oklab()).collect();
     let constraints = CandidateConstraints {
         lightness,
         chroma,
         hue,
     };
-    let candidates = generate_candidates(GridSize::Step(grid_step), constraints, palette_size)?;
+    let weights = DistanceWeights {
+        lightness: lightness_weight,
+        chroma: chroma_weight,
+    };
+    weights.validate()?;
+    let candidates = generate_candidates_with_background_filter(
+        GridSize::Step(grid_step),
+        constraints,
+        BackgroundFilter {
+            backgrounds: &background_labs,
+            min_distance_squared: background_min_distance_squared,
+            lightness_weight: weights.lightness,
+            chroma_weight: weights.chroma,
+        },
+        palette_size,
+    )?;
     let palette = select_palette(
         &candidates,
         PaletteOptions {
@@ -89,14 +113,141 @@ fn generate_palette_inner(
             anchors: PaletteAnchors {
                 seed_colors: &seed_colors,
                 avoid_colors: &avoid_colors,
-                background,
+                backgrounds: &backgrounds,
             },
-            weights: DistanceWeights {
-                lightness: lightness_weight,
-                chroma: chroma_weight,
-            },
+            weights,
         },
     )?;
+
+    Ok(palette.into_iter().map(Rgb8::to_hex).collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    coordinates,
+    dimension,
+    label_ids,
+    label_count,
+    fixed_colors,
+    seed_colors = None,
+    avoid_colors = None,
+    backgrounds = None,
+    background_min_distance_squared = None,
+    lightness = None,
+    chroma = None,
+    hue = None,
+    grid_step = 8,
+    lightness_weight = 1.0,
+    chroma_weight = 1.0,
+    neighbors = 8,
+    max_points = Some(50_000),
+))]
+#[allow(clippy::too_many_arguments)]
+fn generate_label_palette_rs(
+    py: Python<'_>,
+    coordinates: Vec<f64>,
+    dimension: usize,
+    label_ids: Vec<usize>,
+    label_count: usize,
+    fixed_colors: Vec<Option<String>>,
+    seed_colors: Option<Vec<String>>,
+    avoid_colors: Option<Vec<String>>,
+    backgrounds: Option<Vec<String>>,
+    background_min_distance_squared: Option<f32>,
+    lightness: Option<(f32, f32)>,
+    chroma: Option<(Option<f32>, Option<f32>)>,
+    hue: Option<(f32, f32)>,
+    grid_step: u8,
+    lightness_weight: f32,
+    chroma_weight: f32,
+    neighbors: usize,
+    max_points: Option<usize>,
+) -> PyResult<Vec<String>> {
+    py.detach(move || {
+        generate_label_palette_inner(
+            coordinates,
+            dimension,
+            label_ids,
+            label_count,
+            fixed_colors,
+            seed_colors,
+            avoid_colors,
+            backgrounds,
+            background_min_distance_squared,
+            lightness,
+            chroma,
+            hue,
+            grid_step,
+            lightness_weight,
+            chroma_weight,
+            neighbors,
+            max_points,
+        )
+    })
+    .map_err(to_py_value_error)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn generate_label_palette_inner(
+    coordinates: Vec<f64>,
+    dimension: usize,
+    label_ids: Vec<usize>,
+    label_count: usize,
+    fixed_colors: Vec<Option<String>>,
+    seed_colors: Option<Vec<String>>,
+    avoid_colors: Option<Vec<String>>,
+    backgrounds: Option<Vec<String>>,
+    background_min_distance_squared: Option<f32>,
+    lightness: Option<(f32, f32)>,
+    chroma: Option<(Option<f32>, Option<f32>)>,
+    hue: Option<(f32, f32)>,
+    grid_step: u8,
+    lightness_weight: f32,
+    chroma_weight: f32,
+    neighbors: usize,
+    max_points: Option<usize>,
+) -> Result<Vec<String>, GlasbeyError> {
+    let fixed_colors = fixed_colors
+        .into_iter()
+        .map(|color| color.as_deref().map(parse_hex_color).transpose())
+        .collect::<Result<Vec<_>, _>>()?;
+    let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
+    let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
+    let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
+    let background_labs: Vec<_> = backgrounds.iter().map(|color| color.to_oklab()).collect();
+    let constraints = CandidateConstraints {
+        lightness,
+        chroma,
+        hue,
+    };
+    let weights = DistanceWeights {
+        lightness: lightness_weight,
+        chroma: chroma_weight,
+    };
+
+    let palette = select_label_palette(LabelPaletteOptions {
+        coordinates: &coordinates,
+        dimension,
+        label_ids: &label_ids,
+        label_count,
+        fixed_colors: &fixed_colors,
+        constraints,
+        background_filter: BackgroundFilter {
+            backgrounds: &background_labs,
+            min_distance_squared: background_min_distance_squared,
+            lightness_weight: weights.lightness,
+            chroma_weight: weights.chroma,
+        },
+        grid_size: GridSize::Step(grid_step),
+        anchors: PaletteAnchors {
+            seed_colors: &seed_colors,
+            avoid_colors: &avoid_colors,
+            backgrounds: &backgrounds,
+        },
+        weights,
+        neighbors,
+        max_points,
+    })?;
 
     Ok(palette.into_iter().map(Rgb8::to_hex).collect())
 }
@@ -135,6 +286,7 @@ fn to_py_value_error(error: GlasbeyError) -> PyErr {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_palette_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(generate_label_palette_rs, m)?)?;
     m.add_function(wrap_pyfunction!(palette_svg_rs, m)?)?;
     m.add_function(wrap_pyfunction!(palette_png_rs, m)?)?;
     Ok(())
@@ -150,7 +302,8 @@ mod tests {
             3,
             Some(vec!["#f00".to_owned()]),
             None,
-            Some("#fff".to_owned()),
+            Some(vec!["#fff".to_owned()]),
+            Some(0.006),
             Some((0.2, 0.9)),
             Some((Some(0.04), None)),
             None,
@@ -181,6 +334,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             8,
             1.0,
             1.0,
@@ -192,8 +346,9 @@ mod tests {
 
     #[test]
     fn native_bridge_reports_insufficient_candidates() {
-        let error = generate_palette_inner(9, None, None, None, None, None, None, 255, 1.0, 1.0)
-            .unwrap_err();
+        let error =
+            generate_palette_inner(9, None, None, None, None, None, None, None, 255, 1.0, 1.0)
+                .unwrap_err();
 
         assert_eq!(
             error,

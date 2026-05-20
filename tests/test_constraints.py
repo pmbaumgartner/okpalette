@@ -118,3 +118,50 @@ def test_avoid_and_background_colors_are_not_returned() -> None:
     assert len(palette) == 6
     assert "#000000" not in palette
     assert "#ffffff" not in palette
+
+
+def test_background_accepts_single_color_or_sequence() -> None:
+    from_tuple = create_palette(
+        7,
+        background=(255, 255, 255),
+        grid_size=255,
+        lightness=None,
+        chroma=None,
+    )
+    from_sequence = create_palette(
+        6,
+        background=["#ffffff", (0, 0, 255)],
+        grid_size=255,
+        lightness=None,
+        chroma=None,
+    )
+
+    assert "#ffffff" not in from_tuple
+    assert "#ffffff" not in from_sequence
+    assert "#0000ff" not in from_sequence
+
+
+def test_background_contrast_rejects_invalid_preset() -> None:
+    with pytest.raises(ValueError, match="background_contrast"):
+        create_palette(1, background_contrast=cast(Any, "maximum"))
+
+
+def test_high_background_contrast_filters_light_teal_against_pale_blue_background() -> None:
+    unfiltered = create_palette(
+        729,
+        background=None,
+        grid_size=32,
+        lightness=None,
+        chroma=None,
+    )
+    high_contrast = create_palette(
+        679,
+        background="#d1dde4",
+        background_contrast="high",
+        grid_size=32,
+        lightness=None,
+        chroma=None,
+    )
+
+    assert "#c0e0e0" in unfiltered
+    assert "#c0e0e0" not in high_contrast

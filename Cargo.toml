@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Use abi3-py312 so one wheel can support Python 3.12+ where PyO3 APIs allow it.
+kiddo = { version = "5.3.1", default-features = false }
 pyo3 = { version = "0.28.3", features = ["abi3-py312"] }
 png = "0.18"
 rayon = "1.12"

@@ -9,7 +9,7 @@ created: 2026-05-20
 2026-05-20.
 
 **Finding:**
-`okpalette` should add a graph-aware label palette generator. The feature should
+`okpalette` should add a position-aware label palette generator. The feature should
 use point positions to estimate which labels are locally confusing, then generate
 colors so nearby or overlapping labels are more distinct.
 
@@ -43,7 +43,8 @@ def create_label_palette(
     fixed_colors: Optional[Mapping[Hashable, ColorLike]] = None,
     seed_colors: Sequence[ColorLike] = (),
     avoid_colors: Optional[Sequence[ColorLike]] = None,
-    background: Optional[ColorLike] = "#ffffff",
+    background: Optional[BackgroundLike] = "#ffffff",
+    background_contrast: BackgroundContrast = "normal",
     lightness: Optional[tuple[float, float]] = (0.20, 0.90),
     chroma: Optional[tuple[Optional[float], Optional[float]]] = (0.04, None),
     hue: Optional[tuple[float, float]] = None,
@@ -85,8 +86,8 @@ function. Keep dataframe handling in the wrapper.
 - Label IDs are assigned by first appearance.
 - Duplicate positions are allowed.
 - `fixed_colors` preassigns colors to labels and returns them unchanged.
-- `seed_colors`, `avoid_colors`, and `background` keep their current
-  `create_palette()` meanings.
+- `seed_colors`, `avoid_colors`, `background`, and `background_contrast` keep
+  their current `create_palette()` meanings.
 - `neighbors` defaults to 8.
 - `max_points=50_000` is the default graph budget.
 - `max_points=None` opts into exact all-points graph construction.
@@ -137,7 +138,7 @@ Generate colors with the existing candidate constraints:
 - background
 - fixed label colors
 
-Then use the label graph during selection:
+Then use the label graph during position-aware assignment:
 
 1. Assign fixed label colors first.
 2. Process remaining labels by graph degree, then fixed-neighbor weight, then
@@ -153,7 +154,7 @@ Quality metric:
 Q(mapping) = sum(edge_weight(i, j) * OKLab_distance_squared(color_i, color_j))
 ```
 
-Regression tests should show graph-aware generation beats first-seen
+Regression tests should show position-aware assignment beats first-seen
 `create_palette(label_count)` assignment on this score for representative
 fixtures.
 

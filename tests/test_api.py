@@ -8,6 +8,7 @@ import pytest
 
 import okpalette
 from okpalette import palette_png, palette_svg, save_palette, view_palette
+from okpalette import create_label_palette, create_label_palette_from_columns
 from okpalette import create_palette, extend_palette
 from okpalette import _format
 
@@ -18,11 +19,15 @@ def test_public_imports_and_exports() -> None:
     assert module is okpalette
     assert create_palette is okpalette.create_palette
     assert extend_palette is okpalette.extend_palette
+    assert create_label_palette is okpalette.create_label_palette
+    assert create_label_palette_from_columns is okpalette.create_label_palette_from_columns
     assert view_palette is okpalette.view_palette
     assert palette_svg is okpalette.palette_svg
     assert palette_png is okpalette.palette_png
     assert save_palette is okpalette.save_palette
     assert set(getattr(okpalette, "__all__")) == {
+        "BackgroundContrast",
+        "BackgroundLike",
         "ColorFormat",
         "ColorLike",
         "GridSize",
@@ -30,6 +35,8 @@ def test_public_imports_and_exports() -> None:
         "Rgb01",
         "Rgb8",
         "__version__",
+        "create_label_palette",
+        "create_label_palette_from_columns",
         "create_palette",
         "extend_palette",
         "palette_png",

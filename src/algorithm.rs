@@ -14,7 +14,7 @@ pub struct DistanceWeights {
 pub struct PaletteAnchors<'a> {
     pub seed_colors: &'a [Rgb8],
     pub avoid_colors: &'a [Rgb8],
-    pub background: Option<Rgb8>,
+    pub backgrounds: &'a [Rgb8],
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -34,7 +34,7 @@ impl Default for DistanceWeights {
 }
 
 impl DistanceWeights {
-    fn validate(self) -> Result<()> {
+    pub(crate) fn validate(self) -> Result<()> {
         if !self.lightness.is_finite() || !self.chroma.is_finite() {
             return Err(GlasbeyError::InvalidDistanceWeights {
                 message: "weights must be finite",
@@ -111,7 +111,7 @@ fn exact_anchor_exclusions(candidates: &[Candidate], anchors: PaletteAnchors<'_>
 fn is_exact_anchor_match(rgb: Rgb8, anchors: PaletteAnchors<'_>) -> bool {
     anchors.seed_colors.contains(&rgb)
         || anchors.avoid_colors.contains(&rgb)
-        || anchors.background == Some(rgb)
+        || anchors.backgrounds.contains(&rgb)
 }
 
 fn update_from_anchors(
@@ -138,7 +138,7 @@ fn update_from_anchors(
         );
     }
 
-    if let Some(background) = anchors.background {
+    for &background in anchors.backgrounds {
         update_nearest_distances(
             candidates,
             nearest_distances,
@@ -173,7 +173,11 @@ fn update_nearest_distances(
         });
 }
 
-fn weighted_oklab_distance_squared(left: Oklab, right: Oklab, weights: DistanceWeights) -> f32 {
+pub(crate) fn weighted_oklab_distance_squared(
+    left: Oklab,
+    right: Oklab,
+    weights: DistanceWeights,
+) -> f32 {
     let dl = left.l - right.l;
     let da = left.a - right.a;
     let db = left.b - right.b;
@@ -369,7 +373,7 @@ mod tests {
         let options = PaletteOptions {
             palette_size: 2,
             anchors: PaletteAnchors {
-                background: Some(background),
+                backgrounds: &[background],
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
@@ -428,7 +432,7 @@ mod tests {
             anchors: PaletteAnchors {
                 seed_colors: &seed_colors,
                 avoid_colors: &avoid_colors,
-                background: None,
+                ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
         };
@@ -531,7 +535,7 @@ mod tests {
             anchors: PaletteAnchors {
                 seed_colors: &seed_colors,
                 avoid_colors: &avoid_colors,
-                background: Some(rgb(240, 240, 240)),
+                backgrounds: &[rgb(240, 240, 240)],
             },
             weights: DistanceWeights {
                 lightness: 0.7,

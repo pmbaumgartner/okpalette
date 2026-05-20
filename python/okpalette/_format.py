@@ -6,13 +6,22 @@ import math
 import re
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
-from ._types import ColorFormat, ColorLike, GridSize, Rgb01, Rgb8
+from ._types import (
+    BackgroundContrast,
+    BackgroundLike,
+    ColorFormat,
+    ColorLike,
+    GridSize,
+    Rgb01,
+    Rgb8,
+)
 
 Palette = Union[List[str], List[Rgb8], List[Rgb01]]
 
 _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
 _FORMATS = {"hex", "rgb", "rgb01"}
+_BACKGROUND_CONTRASTS = {"normal": 0.006, "high": 0.016}
 
 
 def normalize_color(color: ColorLike) -> str:
@@ -51,6 +60,22 @@ def normalize_optional_color(color: Optional[ColorLike], name: str) -> Optional[
         raise ValueError(f"{name} must be a hex string, RGB tuple, or None") from error
 
 
+def normalize_background_colors(background: Optional[BackgroundLike], name: str) -> List[str]:
+    if background is None:
+        return []
+
+    if isinstance(background, str) or _is_rgb_tuple_like(background):
+        try:
+            return [normalize_color(cast(ColorLike, background))]
+        except ValueError as error:
+            raise ValueError(f"{name} must be a color, a sequence of colors, or None") from error
+
+    try:
+        return normalize_color_sequence(cast(Sequence[ColorLike], background), name)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a color, a sequence of colors, or None") from error
+
+
 def resolve_grid_step(grid_size: GridSize) -> int:
     if isinstance(grid_size, str):
         try:
@@ -83,6 +108,13 @@ def validate_format(output_format: object) -> ColorFormat:
         raise ValueError("format must be 'hex', 'rgb', or 'rgb01'")
 
     return cast(ColorFormat, output_format)
+
+
+def validate_background_contrast(value: object) -> float:
+    if value not in _BACKGROUND_CONTRASTS:
+        raise ValueError("background_contrast must be 'normal' or 'high'")
+
+    return _BACKGROUND_CONTRASTS[cast(BackgroundContrast, value)]
 
 
 def validate_lightness(value: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
@@ -150,12 +182,22 @@ def load_generate_palette_rs() -> Any:
     return generate_palette_rs
 
 
+def load_generate_label_palette_rs() -> Any:
+    try:
+        from ._core import generate_label_palette_rs
+    except ImportError as error:
+        raise ImportError(
+            "okpalette native extension is unavailable; install the okpalette wheel "
+            "or run `maturin develop` in the source checkout."
+        ) from error
+
+    return generate_label_palette_rs
+
+
 def _normalize_hex_color(color: str) -> str:
     match = _HEX_RE.fullmatch(color)
     if match is None:
-        raise ValueError(
-            "hex colors must be #RGB, #RRGGBB, RGB, or RRGGBB with ASCII hex digits"
-        )
+        raise ValueError("hex colors must be #RGB, #RRGGBB, RGB, or RRGGBB with ASCII hex digits")
 
     hex_digits = match.group(1).lower()
     if len(hex_digits) == 3:
@@ -171,9 +213,7 @@ def _normalize_rgb_tuple(color: Tuple[object, ...]) -> str:
     if all(type(component) is int for component in color):
         red, green, blue = cast(Rgb8, color)
         if all(component in (0, 1) for component in (red, green, blue)):
-            raise ValueError(
-                "ambiguous integer RGB tuple; use 0..255 integers or 0.0..1.0 floats"
-            )
+            raise ValueError("ambiguous integer RGB tuple; use 0..255 integers or 0.0..1.0 floats")
         for component in (red, green, blue):
             if not 0 <= component <= 255:
                 raise ValueError("integer RGB tuple components must be in 0..255")
@@ -191,6 +231,17 @@ def _normalize_rgb_tuple(color: Tuple[object, ...]) -> str:
         return f"#{red:02x}{green:02x}{blue:02x}"
 
     raise ValueError("RGB tuple components must be all int or all float")
+
+
+def _is_rgb_tuple_like(value: object) -> bool:
+    return (
+        isinstance(value, tuple)
+        and len(value) == 3
+        and (
+            all(type(component) is int for component in value)
+            or all(type(component) is float for component in value)
+        )
+    )
 
 
 def _validate_float_pair(

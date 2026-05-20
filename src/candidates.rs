@@ -24,6 +24,25 @@ pub struct CandidateConstraints {
     pub hue: Option<(f32, f32)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BackgroundFilter<'a> {
+    pub backgrounds: &'a [Oklab],
+    pub min_distance_squared: Option<f32>,
+    pub lightness_weight: f32,
+    pub chroma_weight: f32,
+}
+
+impl Default for BackgroundFilter<'_> {
+    fn default() -> Self {
+        Self {
+            backgrounds: &[],
+            min_distance_squared: None,
+            lightness_weight: 1.0,
+            chroma_weight: 1.0,
+        }
+    }
+}
+
 impl GridSize {
     pub fn step(self) -> Result<u8> {
         match self {
@@ -41,7 +60,22 @@ pub fn generate_candidates(
     constraints: CandidateConstraints,
     requested_palette_size: usize,
 ) -> Result<Vec<Candidate>> {
+    generate_candidates_with_background_filter(
+        grid_size,
+        constraints,
+        BackgroundFilter::default(),
+        requested_palette_size,
+    )
+}
+
+pub fn generate_candidates_with_background_filter(
+    grid_size: GridSize,
+    constraints: CandidateConstraints,
+    background_filter: BackgroundFilter<'_>,
+    requested_palette_size: usize,
+) -> Result<Vec<Candidate>> {
     constraints.validate()?;
+    background_filter.validate()?;
 
     let channel_values = channel_values(grid_size.step()?);
     let mut candidates =
@@ -60,7 +94,7 @@ pub fn generate_candidates(
                     hue: oklch.h,
                 };
 
-                if constraints.allows(candidate) {
+                if constraints.allows(candidate) && background_filter.allows(candidate.lab) {
                     candidates.push(candidate);
                 }
             }
@@ -75,6 +109,54 @@ pub fn generate_candidates(
     }
 
     Ok(candidates)
+}
+
+impl BackgroundFilter<'_> {
+    fn validate(self) -> Result<()> {
+        if let Some(min_distance_squared) = self.min_distance_squared {
+            if !min_distance_squared.is_finite() || min_distance_squared < 0.0 {
+                return Err(GlasbeyError::InvalidConstraintRange {
+                    constraint: "background",
+                    message: "contrast distance must be finite and greater than or equal to zero",
+                });
+            }
+        }
+
+        if !self.lightness_weight.is_finite() || !self.chroma_weight.is_finite() {
+            return Err(GlasbeyError::InvalidDistanceWeights {
+                message: "weights must be finite",
+            });
+        }
+
+        if self.lightness_weight < 0.0 || self.chroma_weight < 0.0 {
+            return Err(GlasbeyError::InvalidDistanceWeights {
+                message: "weights must be greater than or equal to zero",
+            });
+        }
+
+        if self.lightness_weight == 0.0 && self.chroma_weight == 0.0 {
+            return Err(GlasbeyError::InvalidDistanceWeights {
+                message: "at least one weight must be positive",
+            });
+        }
+
+        Ok(())
+    }
+
+    fn allows(self, lab: Oklab) -> bool {
+        let Some(min_distance_squared) = self.min_distance_squared else {
+            return true;
+        };
+
+        self.backgrounds.iter().all(|&background| {
+            weighted_oklab_distance_squared(
+                lab,
+                background,
+                self.lightness_weight,
+                self.chroma_weight,
+            ) >= min_distance_squared
+        })
+    }
 }
 
 impl CandidateConstraints {
@@ -133,6 +215,19 @@ impl CandidateConstraints {
 
         true
     }
+}
+
+fn weighted_oklab_distance_squared(
+    left: Oklab,
+    right: Oklab,
+    lightness_weight: f32,
+    chroma_weight: f32,
+) -> f32 {
+    let dl = left.l - right.l;
+    let da = left.a - right.a;
+    let db = left.b - right.b;
+
+    lightness_weight * dl * dl + chroma_weight * (da * da + db * db)
 }
 
 fn channel_values(step: u8) -> Vec<u8> {
@@ -249,6 +344,10 @@ mod tests {
 
     fn small_candidates(constraints: CandidateConstraints) -> Result<Vec<Candidate>> {
         generate_candidates(GridSize::Step(255), constraints, 0)
+    }
+
+    fn rgb(r: u8, g: u8, b: u8) -> Rgb8 {
+        Rgb8 { r, g, b }
     }
 
     #[test]
@@ -417,6 +516,46 @@ mod tests {
     }
 
     #[test]
+    fn filters_by_background_contrast_distance() {
+        let background = rgb(255, 255, 255).to_oklab();
+        let candidates = generate_candidates_with_background_filter(
+            GridSize::Step(255),
+            CandidateConstraints::default(),
+            BackgroundFilter {
+                backgrounds: &[background],
+                min_distance_squared: Some(0.006),
+                ..BackgroundFilter::default()
+            },
+            0,
+        )
+        .unwrap();
+        let rgbs = rgb_values(&candidates);
+
+        assert!(!rgbs.contains(&rgb(255, 255, 255)));
+        assert!(rgbs.contains(&rgb(255, 0, 0)));
+    }
+
+    #[test]
+    fn background_filter_can_apply_multiple_backgrounds() {
+        let backgrounds = [rgb(255, 255, 255).to_oklab(), rgb(0, 0, 0).to_oklab()];
+        let candidates = generate_candidates_with_background_filter(
+            GridSize::Step(255),
+            CandidateConstraints::default(),
+            BackgroundFilter {
+                backgrounds: &backgrounds,
+                min_distance_squared: Some(0.006),
+                ..BackgroundFilter::default()
+            },
+            0,
+        )
+        .unwrap();
+        let rgbs = rgb_values(&candidates);
+
+        assert!(!rgbs.contains(&rgb(255, 255, 255)));
+        assert!(!rgbs.contains(&rgb(0, 0, 0)));
+    }
+
+    #[test]
     fn rejects_invalid_constraint_ranges() {
         for constraints in [
             CandidateConstraints {
@@ -470,6 +609,8 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("8 candidate colors"));
         assert!(message.contains("palette_size=9"));
-        assert!(message.contains("relaxing lightness, chroma, hue, or grid_size"));
+        assert!(
+            message.contains("relaxing lightness, chroma, hue, background_contrast, or grid_size")
+        );
     }
 }
