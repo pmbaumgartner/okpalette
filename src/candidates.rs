@@ -1,3 +1,4 @@
+use crate::algorithm::DistanceWeights;
 use crate::color::{Oklab, Rgb8};
 use crate::error::{GlasbeyError, Result};
 
@@ -7,6 +8,19 @@ pub struct Candidate {
     pub lab: Oklab,
     pub chroma: f32,
     pub hue: f32,
+}
+
+impl Candidate {
+    pub fn from_rgb(rgb: Rgb8) -> Self {
+        let lab = rgb.to_oklab();
+        let oklch = lab.to_oklch();
+        Self {
+            rgb,
+            lab,
+            chroma: oklch.c,
+            hue: oklch.h,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,23 +38,11 @@ pub struct CandidateConstraints {
     pub hue: Option<(f32, f32)>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct BackgroundFilter<'a> {
     pub backgrounds: &'a [Oklab],
     pub min_distance_squared: Option<f32>,
-    pub lightness_weight: f32,
-    pub chroma_weight: f32,
-}
-
-impl Default for BackgroundFilter<'_> {
-    fn default() -> Self {
-        Self {
-            backgrounds: &[],
-            min_distance_squared: None,
-            lightness_weight: 1.0,
-            chroma_weight: 1.0,
-        }
-    }
+    pub weights: DistanceWeights,
 }
 
 impl GridSize {
@@ -85,14 +87,7 @@ pub fn generate_candidates_with_background_filter(
         for &g in &channel_values {
             for &b in &channel_values {
                 let rgb = Rgb8 { r, g, b };
-                let lab = rgb.to_oklab();
-                let oklch = lab.to_oklch();
-                let candidate = Candidate {
-                    rgb,
-                    lab,
-                    chroma: oklch.c,
-                    hue: oklch.h,
-                };
+                let candidate = Candidate::from_rgb(rgb);
 
                 if constraints.allows(candidate) && background_filter.allows(candidate.lab) {
                     candidates.push(candidate);
@@ -122,25 +117,7 @@ impl BackgroundFilter<'_> {
             }
         }
 
-        if !self.lightness_weight.is_finite() || !self.chroma_weight.is_finite() {
-            return Err(GlasbeyError::InvalidDistanceWeights {
-                message: "weights must be finite",
-            });
-        }
-
-        if self.lightness_weight < 0.0 || self.chroma_weight < 0.0 {
-            return Err(GlasbeyError::InvalidDistanceWeights {
-                message: "weights must be greater than or equal to zero",
-            });
-        }
-
-        if self.lightness_weight == 0.0 && self.chroma_weight == 0.0 {
-            return Err(GlasbeyError::InvalidDistanceWeights {
-                message: "at least one weight must be positive",
-            });
-        }
-
-        Ok(())
+        self.weights.validate()
     }
 
     fn allows(self, lab: Oklab) -> bool {
@@ -149,12 +126,7 @@ impl BackgroundFilter<'_> {
         };
 
         self.backgrounds.iter().all(|&background| {
-            weighted_oklab_distance_squared(
-                lab,
-                background,
-                self.lightness_weight,
-                self.chroma_weight,
-            ) >= min_distance_squared
+            self.weights.oklab_distance_squared(lab, background) >= min_distance_squared
         })
     }
 }
@@ -215,19 +187,6 @@ impl CandidateConstraints {
 
         true
     }
-}
-
-fn weighted_oklab_distance_squared(
-    left: Oklab,
-    right: Oklab,
-    lightness_weight: f32,
-    chroma_weight: f32,
-) -> f32 {
-    let dl = left.l - right.l;
-    let da = left.a - right.a;
-    let db = left.b - right.b;
-
-    lightness_weight * dl * dl + chroma_weight * (da * da + db * db)
 }
 
 fn channel_values(step: u8) -> Vec<u8> {

@@ -55,6 +55,14 @@ impl DistanceWeights {
 
         Ok(())
     }
+
+    pub(crate) fn oklab_distance_squared(self, left: Oklab, right: Oklab) -> f32 {
+        let dl = left.l - right.l;
+        let da = left.a - right.a;
+        let db = left.b - right.b;
+
+        self.lightness * dl * dl + self.chroma * (da * da + db * db)
+    }
 }
 
 pub fn select_palette(candidates: &[Candidate], options: PaletteOptions<'_>) -> Result<Vec<Rgb8>> {
@@ -166,23 +174,11 @@ fn update_nearest_distances(
         .par_iter()
         .zip(nearest_distances.par_iter_mut())
         .for_each(|(candidate, nearest_distance)| {
-            let distance = weighted_oklab_distance_squared(candidate.lab, anchor, weights);
+            let distance = weights.oklab_distance_squared(candidate.lab, anchor);
             if distance < *nearest_distance {
                 *nearest_distance = distance;
             }
         });
-}
-
-pub(crate) fn weighted_oklab_distance_squared(
-    left: Oklab,
-    right: Oklab,
-    weights: DistanceWeights,
-) -> f32 {
-    let dl = left.l - right.l;
-    let da = left.a - right.a;
-    let db = left.b - right.b;
-
-    weights.lightness * dl * dl + weights.chroma * (da * da + db * db)
 }
 
 fn select_farthest_candidate(nearest_distances: &[f32]) -> Option<usize> {
@@ -208,8 +204,7 @@ mod tests {
     }
 
     fn candidate(rgb: Rgb8) -> Candidate {
-        let lab = rgb.to_oklab();
-        candidate_with_lab(rgb, lab)
+        Candidate::from_rgb(rgb)
     }
 
     fn candidate_with_lab(rgb: Rgb8, lab: Oklab) -> Candidate {

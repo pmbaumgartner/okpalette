@@ -3,10 +3,7 @@ use std::collections::HashMap;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
-use crate::algorithm::{
-    select_palette, weighted_oklab_distance_squared, DistanceWeights, PaletteAnchors,
-    PaletteOptions,
-};
+use crate::algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
 use crate::candidates::{
     generate_candidates_with_background_filter, BackgroundFilter, Candidate, CandidateConstraints,
     GridSize,
@@ -112,7 +109,7 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
     )?;
     let palette_candidates: Vec<Candidate> = generated_palette
         .into_iter()
-        .map(candidate_from_rgb)
+        .map(Candidate::from_rgb)
         .collect();
     let mut available = vec![true; palette_candidates.len()];
 
@@ -144,17 +141,6 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
         .into_iter()
         .map(|color| color.expect("all labels were assigned colors"))
         .collect())
-}
-
-fn candidate_from_rgb(rgb: Rgb8) -> Candidate {
-    let lab = rgb.to_oklab();
-    let oklch = lab.to_oklch();
-    Candidate {
-        rgb,
-        lab,
-        chroma: oklch.c,
-        hue: oklch.h,
-    }
 }
 
 fn validate_options(options: LabelPaletteOptions<'_>) -> Result<()> {
@@ -562,7 +548,7 @@ fn assigned_neighbor_distance(
     for &(neighbor, edge_weight) in &graph.adjacency[label_id] {
         if let Some(neighbor_lab) = assignment.labs[neighbor] {
             weighted_sum +=
-                edge_weight * weighted_oklab_distance_squared(candidate_lab, neighbor_lab, weights);
+                edge_weight * weights.oklab_distance_squared(candidate_lab, neighbor_lab);
             total_weight += edge_weight;
         }
     }
@@ -643,8 +629,7 @@ fn swap_delta(
 
         let edge_left_lab = labs[edge.left].expect("edge endpoint is assigned");
         let edge_right_lab = labs[edge.right].expect("edge endpoint is assigned");
-        before +=
-            edge.weight * weighted_oklab_distance_squared(edge_left_lab, edge_right_lab, weights);
+        before += edge.weight * weights.oklab_distance_squared(edge_left_lab, edge_right_lab);
 
         let swapped_left_lab = if edge.left == left_label {
             right_lab
@@ -660,8 +645,7 @@ fn swap_delta(
         } else {
             edge_right_lab
         };
-        after += edge.weight
-            * weighted_oklab_distance_squared(swapped_left_lab, swapped_right_lab, weights);
+        after += edge.weight * weights.oklab_distance_squared(swapped_left_lab, swapped_right_lab);
     }
 
     after - before
@@ -834,10 +818,9 @@ mod tests {
             .iter()
             .map(|edge| {
                 edge.weight
-                    * weighted_oklab_distance_squared(
+                    * weights.oklab_distance_squared(
                         palette[edge.left].to_oklab(),
                         palette[edge.right].to_oklab(),
-                        weights,
                     )
             })
             .sum()

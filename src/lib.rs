@@ -101,8 +101,7 @@ fn generate_palette_inner(
         BackgroundFilter {
             backgrounds: &background_labs,
             min_distance_squared: background_min_distance_squared,
-            lightness_weight: weights.lightness,
-            chroma_weight: weights.chroma,
+            weights,
         },
         palette_size,
     )?;
@@ -235,8 +234,7 @@ fn generate_label_palette_inner(
         background_filter: BackgroundFilter {
             backgrounds: &background_labs,
             min_distance_squared: background_min_distance_squared,
-            lightness_weight: weights.lightness,
-            chroma_weight: weights.chroma,
+            weights,
         },
         grid_size: GridSize::Step(grid_step),
         anchors: PaletteAnchors {
