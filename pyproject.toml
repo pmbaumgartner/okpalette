@@ -6,10 +6,16 @@ build-backend = "maturin"
 name = "okpalette"
 version = "0.1.0"
 description = "Fast, dependency-free OKLab categorical color palettes powered by Rust"
+readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 keywords = ["color", "palette", "glasbey", "categorical", "oklab", "visualization"]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/pmbaumgartner/okpalette"
+Repository = "https://github.com/pmbaumgartner/okpalette"
+Issues = "https://github.com/pmbaumgartner/okpalette/issues"
 
 [project.optional-dependencies]
 dev = [
