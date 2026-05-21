@@ -16,7 +16,7 @@ use candidates::{
     generate_candidates_with_background_filter, BackgroundFilter, CandidateConstraints, GridSize,
     NORMAL_BACKGROUND_DISTANCE_SQUARED, WCAG_NON_TEXT_CONTRAST_RATIO,
 };
-use color::Rgb8;
+use color::{ColorblindMode, Rgb8};
 use error::GlasbeyError;
 use label::{select_label_palette, LabelPaletteOptions};
 use parse::parse_hex_color;
@@ -36,6 +36,7 @@ use render::{render_palette_png, render_palette_svg};
     grid_step = 8,
     lightness_weight = 1.0,
     chroma_weight = 1.0,
+    colorblind_mode = None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn generate_palette_rs(
@@ -51,6 +52,7 @@ fn generate_palette_rs(
     grid_step: u8,
     lightness_weight: f32,
     chroma_weight: f32,
+    colorblind_mode: Option<String>,
 ) -> PyResult<Vec<String>> {
     py.detach(move || {
         generate_palette_inner(
@@ -65,6 +67,7 @@ fn generate_palette_rs(
             grid_step,
             lightness_weight,
             chroma_weight,
+            colorblind_mode,
         )
     })
     .map_err(to_py_value_error)
@@ -83,10 +86,12 @@ fn generate_palette_inner(
     grid_step: u8,
     lightness_weight: f32,
     chroma_weight: f32,
+    colorblind_mode: Option<String>,
 ) -> Result<Vec<String>, GlasbeyError> {
     let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
     let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
     let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
+    let colorblind_mode = ColorblindMode::parse(colorblind_mode.as_deref())?;
     let constraints = CandidateConstraints {
         lightness,
         chroma,
@@ -97,8 +102,12 @@ fn generate_palette_inner(
         chroma: chroma_weight,
     };
     weights.validate()?;
-    let background_filter =
-        background_filter_from_mode(&backgrounds, background_contrast.as_deref(), weights)?;
+    let background_filter = background_filter_from_mode(
+        &backgrounds,
+        background_contrast.as_deref(),
+        weights,
+        colorblind_mode,
+    )?;
     background_filter.validate_user_colors("seed_colors", &seed_colors)?;
     let candidates = generate_candidates_with_background_filter(
         GridSize::Step(grid_step),
@@ -116,6 +125,7 @@ fn generate_palette_inner(
                 backgrounds: &backgrounds,
             },
             weights,
+            colorblind_mode,
         },
     )?;
 
@@ -139,6 +149,7 @@ fn generate_palette_inner(
     grid_step = 8,
     lightness_weight = 1.0,
     chroma_weight = 1.0,
+    colorblind_mode = None,
     neighbors = 8,
     max_points = Some(50_000),
 ))]
@@ -160,6 +171,7 @@ fn generate_label_palette_rs(
     grid_step: u8,
     lightness_weight: f32,
     chroma_weight: f32,
+    colorblind_mode: Option<String>,
     neighbors: usize,
     max_points: Option<usize>,
 ) -> PyResult<Vec<String>> {
@@ -180,6 +192,7 @@ fn generate_label_palette_rs(
             grid_step,
             lightness_weight,
             chroma_weight,
+            colorblind_mode,
             neighbors,
             max_points,
         )
@@ -204,6 +217,7 @@ fn generate_label_palette_inner(
     grid_step: u8,
     lightness_weight: f32,
     chroma_weight: f32,
+    colorblind_mode: Option<String>,
     neighbors: usize,
     max_points: Option<usize>,
 ) -> Result<Vec<String>, GlasbeyError> {
@@ -214,6 +228,7 @@ fn generate_label_palette_inner(
     let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
     let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
     let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
+    let colorblind_mode = ColorblindMode::parse(colorblind_mode.as_deref())?;
     let constraints = CandidateConstraints {
         lightness,
         chroma,
@@ -223,8 +238,12 @@ fn generate_label_palette_inner(
         lightness: lightness_weight,
         chroma: chroma_weight,
     };
-    let background_filter =
-        background_filter_from_mode(&backgrounds, background_contrast.as_deref(), weights)?;
+    let background_filter = background_filter_from_mode(
+        &backgrounds,
+        background_contrast.as_deref(),
+        weights,
+        colorblind_mode,
+    )?;
     background_filter.validate_user_colors("seed_colors", &seed_colors)?;
     let fixed_anchor_colors: Vec<Rgb8> = fixed_colors.iter().flatten().copied().collect();
     background_filter.validate_user_colors("fixed_colors", &fixed_anchor_colors)?;
@@ -244,6 +263,7 @@ fn generate_label_palette_inner(
             backgrounds: &backgrounds,
         },
         weights,
+        colorblind_mode,
         neighbors,
         max_points,
     })?;
@@ -262,6 +282,7 @@ fn background_filter_from_mode<'a>(
     backgrounds: &'a [Rgb8],
     background_contrast: Option<&str>,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) -> Result<BackgroundFilter<'a>, GlasbeyError> {
     match (backgrounds.is_empty(), background_contrast) {
         (true, None) => Ok(BackgroundFilter::None),
@@ -277,6 +298,7 @@ fn background_filter_from_mode<'a>(
             backgrounds,
             min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
             weights,
+            colorblind_mode,
         }),
         (false, Some("high" | "wcag")) => Ok(BackgroundFilter::WcagNonTextContrast {
             backgrounds,
@@ -341,6 +363,7 @@ mod tests {
             64,
             1.0,
             1.0,
+            None,
         )
         .unwrap();
 
@@ -363,6 +386,7 @@ mod tests {
             8,
             1.0,
             1.0,
+            None,
         )
         .unwrap_err();
 
@@ -371,9 +395,10 @@ mod tests {
 
     #[test]
     fn native_bridge_reports_insufficient_candidates() {
-        let error =
-            generate_palette_inner(9, None, None, None, None, None, None, None, 255, 1.0, 1.0)
-                .unwrap_err();
+        let error = generate_palette_inner(
+            9, None, None, None, None, None, None, None, 255, 1.0, 1.0, None,
+        )
+        .unwrap_err();
 
         assert_eq!(
             error,
@@ -382,6 +407,33 @@ mod tests {
                 requested: 9
             }
         );
+    }
+
+    #[test]
+    fn native_bridge_rejects_invalid_colorblind_mode() {
+        let error = generate_palette_inner(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            255,
+            1.0,
+            1.0,
+            Some("protanopia".to_owned()),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            GlasbeyError::InvalidConstraintRange {
+                constraint: "colorblind_mode",
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -398,6 +450,7 @@ mod tests {
             255,
             1.0,
             1.0,
+            None,
         )
         .unwrap_err();
 

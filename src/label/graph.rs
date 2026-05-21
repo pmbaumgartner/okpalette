@@ -186,7 +186,7 @@ mod tests {
     use super::*;
     use crate::algorithm::{DistanceWeights, PaletteAnchors};
     use crate::candidates::{BackgroundFilter, CandidateConstraints, GridSize};
-    use crate::color::Rgb8;
+    use crate::color::{ColorblindMode, Rgb8};
 
     fn base_options<'a>(
         coordinates: &'a [f64],
@@ -205,6 +205,7 @@ mod tests {
             grid_size: GridSize::Step(255),
             anchors: PaletteAnchors::default(),
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
             neighbors: 2,
             max_points: None,
         }

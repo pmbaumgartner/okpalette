@@ -1,7 +1,7 @@
 use rayon::prelude::*;
 
 use crate::candidates::Candidate;
-use crate::color::{Oklab, Rgb8};
+use crate::color::{ColorProfile, ColorblindMode, Oklab, Rgb8};
 use crate::error::{GlasbeyError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,6 +22,7 @@ pub struct PaletteOptions<'a> {
     pub palette_size: usize,
     pub anchors: PaletteAnchors<'a>,
     pub weights: DistanceWeights,
+    pub colorblind_mode: ColorblindMode,
 }
 
 impl Default for DistanceWeights {
@@ -63,6 +64,53 @@ impl DistanceWeights {
 
         self.lightness * dl * dl + self.chroma * (da * da + db * db)
     }
+
+    pub(crate) fn color_profile_distance_squared(
+        self,
+        left: ColorProfile,
+        right: ColorProfile,
+        colorblind_mode: ColorblindMode,
+    ) -> f32 {
+        let mut distance = self.oklab_distance_squared(left.normal, right.normal);
+
+        if colorblind_mode.includes_protan() {
+            distance = distance.min(
+                self.oklab_distance_squared(
+                    left.protan
+                        .expect("protan profile is precomputed when protan mode is enabled"),
+                    right
+                        .protan
+                        .expect("protan profile is precomputed when protan mode is enabled"),
+                ),
+            );
+        }
+
+        if colorblind_mode.includes_deutan() {
+            distance = distance.min(
+                self.oklab_distance_squared(
+                    left.deutan
+                        .expect("deutan profile is precomputed when deutan mode is enabled"),
+                    right
+                        .deutan
+                        .expect("deutan profile is precomputed when deutan mode is enabled"),
+                ),
+            );
+        }
+
+        if colorblind_mode.includes_tritan() {
+            distance = distance.min(
+                self.oklab_distance_squared(
+                    left.tritan
+                        .expect("tritan profile is precomputed when tritan mode is enabled"),
+                    right
+                        .tritan
+                        .expect("tritan profile is precomputed when tritan mode is enabled"),
+                ),
+            );
+        }
+
+        distance
+    }
 }
 
 pub fn select_palette(candidates: &[Candidate], options: PaletteOptions<'_>) -> Result<Vec<Rgb8>> {
@@ -81,12 +129,14 @@ pub fn select_palette(candidates: &[Candidate], options: PaletteOptions<'_>) -> 
         });
     }
 
+    let candidate_profiles = candidate_profiles(candidates, options.colorblind_mode);
     let mut nearest_distances = vec![f32::INFINITY; candidates.len()];
     update_from_anchors(
-        candidates,
+        &candidate_profiles,
         &mut nearest_distances,
         options.anchors,
         options.weights,
+        options.colorblind_mode,
     );
     exclude_candidates(&mut nearest_distances, &excluded);
 
@@ -95,18 +145,32 @@ pub fn select_palette(candidates: &[Candidate], options: PaletteOptions<'_>) -> 
         let selected_index = select_farthest_candidate(&nearest_distances)
             .expect("available candidates were checked before selection");
         let selected = candidates[selected_index];
+        let selected_profile = candidate_profiles[selected_index];
 
         palette.push(selected.rgb);
         update_nearest_distances(
-            candidates,
+            &candidate_profiles,
             &mut nearest_distances,
-            selected.lab,
+            selected_profile,
             options.weights,
+            options.colorblind_mode,
         );
         nearest_distances[selected_index] = f32::NEG_INFINITY;
     }
 
     Ok(palette)
+}
+
+fn candidate_profiles(
+    candidates: &[Candidate],
+    colorblind_mode: ColorblindMode,
+) -> Vec<ColorProfile> {
+    candidates
+        .par_iter()
+        .map(|candidate| {
+            ColorProfile::from_rgb_and_normal(candidate.rgb, candidate.lab, colorblind_mode)
+        })
+        .collect()
 }
 
 fn exact_anchor_exclusions(candidates: &[Candidate], anchors: PaletteAnchors<'_>) -> Vec<bool> {
@@ -123,35 +187,39 @@ fn is_exact_anchor_match(rgb: Rgb8, anchors: PaletteAnchors<'_>) -> bool {
 }
 
 fn update_from_anchors(
-    candidates: &[Candidate],
+    candidate_profiles: &[ColorProfile],
     nearest_distances: &mut [f32],
     anchors: PaletteAnchors<'_>,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) {
     for &seed_color in anchors.seed_colors {
         update_nearest_distances(
-            candidates,
+            candidate_profiles,
             nearest_distances,
-            seed_color.to_oklab(),
+            ColorProfile::from_rgb(seed_color, colorblind_mode),
             weights,
+            colorblind_mode,
         );
     }
 
     for &avoid_color in anchors.avoid_colors {
         update_nearest_distances(
-            candidates,
+            candidate_profiles,
             nearest_distances,
-            avoid_color.to_oklab(),
+            ColorProfile::from_rgb(avoid_color, colorblind_mode),
             weights,
+            colorblind_mode,
         );
     }
 
     for &background in anchors.backgrounds {
         update_nearest_distances(
-            candidates,
+            candidate_profiles,
             nearest_distances,
-            background.to_oklab(),
+            ColorProfile::from_rgb(background, colorblind_mode),
             weights,
+            colorblind_mode,
         );
     }
 }
@@ -165,16 +233,18 @@ fn exclude_candidates(nearest_distances: &mut [f32], excluded: &[bool]) {
 }
 
 fn update_nearest_distances(
-    candidates: &[Candidate],
+    candidate_profiles: &[ColorProfile],
     nearest_distances: &mut [f32],
-    anchor: Oklab,
+    anchor: ColorProfile,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) {
-    candidates
+    candidate_profiles
         .par_iter()
         .zip(nearest_distances.par_iter_mut())
-        .for_each(|(candidate, nearest_distance)| {
-            let distance = weights.oklab_distance_squared(candidate.lab, anchor);
+        .for_each(|(candidate_profile, nearest_distance)| {
+            let distance =
+                weights.color_profile_distance_squared(*candidate_profile, anchor, colorblind_mode);
             if distance < *nearest_distance {
                 *nearest_distance = distance;
             }
@@ -223,6 +293,17 @@ mod tests {
             palette_size,
             anchors: PaletteAnchors::default(),
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
+        }
+    }
+
+    fn colorblind_options(
+        palette_size: usize,
+        colorblind_mode: ColorblindMode,
+    ) -> PaletteOptions<'static> {
+        PaletteOptions {
+            colorblind_mode,
+            ..options(palette_size)
         }
     }
 
@@ -303,6 +384,7 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         assert_eq!(
@@ -327,6 +409,7 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         let palette = select_palette(&candidates, options).unwrap();
@@ -346,6 +429,7 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         let palette = select_palette(&candidates, options).unwrap();
@@ -368,11 +452,48 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         let palette = select_palette(&candidates, options).unwrap();
 
         assert_eq!(palette, vec![candidates[1].rgb, candidates[0].rgb]);
+    }
+
+    #[test]
+    fn colorblind_mode_uses_worst_case_simulated_distance() {
+        let candidates = candidates(&[rgb(255, 0, 0), rgb(0, 0, 255), rgb(0, 255, 255)]);
+
+        assert_eq!(
+            select_palette(&candidates, options(2)),
+            Ok(vec![rgb(255, 0, 0), rgb(0, 0, 255)])
+        );
+        assert_eq!(
+            select_palette(&candidates, colorblind_options(2, ColorblindMode::Protan)),
+            Ok(vec![rgb(255, 0, 0), rgb(0, 255, 255)])
+        );
+    }
+
+    #[test]
+    fn all_colorblind_mode_scores_against_every_simulation() {
+        let weights = DistanceWeights::default();
+        let left = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::All);
+        let right = ColorProfile::from_rgb(rgb(0, 0, 255), ColorblindMode::All);
+
+        let expected = [
+            weights.oklab_distance_squared(left.normal, right.normal),
+            weights.oklab_distance_squared(left.protan.unwrap(), right.protan.unwrap()),
+            weights.oklab_distance_squared(left.deutan.unwrap(), right.deutan.unwrap()),
+            weights.oklab_distance_squared(left.tritan.unwrap(), right.tritan.unwrap()),
+        ]
+        .into_iter()
+        .reduce(f32::min)
+        .unwrap();
+
+        assert_eq!(
+            weights.color_profile_distance_squared(left, right, ColorblindMode::All),
+            expected
+        );
     }
 
     #[test]
@@ -390,6 +511,7 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         assert_eq!(
@@ -415,6 +537,7 @@ mod tests {
                 ..PaletteAnchors::default()
             },
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
         };
 
         assert_eq!(
@@ -482,6 +605,7 @@ mod tests {
                 lightness: 0.7,
                 chroma: 1.3,
             },
+            colorblind_mode: ColorblindMode::None,
         };
         let expected = select_palette(&candidates, options).unwrap();
 

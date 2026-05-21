@@ -1,5 +1,5 @@
 use crate::algorithm::DistanceWeights;
-use crate::color::{wcag_contrast_ratio, Oklab, Rgb8};
+use crate::color::{wcag_contrast_ratio, ColorProfile, ColorblindMode, Oklab, Rgb8};
 use crate::error::{GlasbeyError, Result};
 
 pub const NORMAL_BACKGROUND_DISTANCE_SQUARED: f32 = 0.006;
@@ -49,6 +49,7 @@ pub enum BackgroundFilter<'a> {
         backgrounds: &'a [Rgb8],
         min_distance_squared: f32,
         weights: DistanceWeights,
+        colorblind_mode: ColorblindMode,
     },
     WcagNonTextContrast {
         backgrounds: &'a [Rgb8],
@@ -156,10 +157,21 @@ impl BackgroundFilter<'_> {
                 backgrounds,
                 min_distance_squared,
                 weights,
-            } => backgrounds.iter().all(|&background| {
-                weights.oklab_distance_squared(candidate.lab, background.to_oklab())
-                    >= min_distance_squared
-            }),
+                colorblind_mode,
+            } => {
+                let candidate_profile = ColorProfile::from_rgb_and_normal(
+                    candidate.rgb,
+                    candidate.lab,
+                    colorblind_mode,
+                );
+                backgrounds.iter().all(|&background| {
+                    weights.color_profile_distance_squared(
+                        candidate_profile,
+                        ColorProfile::from_rgb(background, colorblind_mode),
+                        colorblind_mode,
+                    ) >= min_distance_squared
+                })
+            }
             Self::WcagNonTextContrast {
                 backgrounds,
                 min_ratio,
@@ -506,6 +518,7 @@ mod tests {
                 backgrounds: &backgrounds,
                 min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
                 weights: DistanceWeights::default(),
+                colorblind_mode: ColorblindMode::None,
             },
             0,
         )
@@ -526,6 +539,7 @@ mod tests {
                 backgrounds: &backgrounds,
                 min_distance_squared: NORMAL_BACKGROUND_DISTANCE_SQUARED,
                 weights: DistanceWeights::default(),
+                colorblind_mode: ColorblindMode::None,
             },
             0,
         )

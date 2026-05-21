@@ -7,7 +7,7 @@ use crate::candidates::{
     generate_candidates_with_background_filter, BackgroundFilter, Candidate, CandidateConstraints,
     GridSize,
 };
-use crate::color::Rgb8;
+use crate::color::{ColorblindMode, Rgb8};
 use crate::error::{GlasbeyError, Result};
 
 use self::assignment::assign_generated_palette;
@@ -25,6 +25,7 @@ pub struct LabelPaletteOptions<'a> {
     pub grid_size: GridSize,
     pub anchors: PaletteAnchors<'a>,
     pub weights: DistanceWeights,
+    pub colorblind_mode: ColorblindMode,
     pub neighbors: usize,
     pub max_points: Option<usize>,
 }
@@ -84,6 +85,7 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
                 backgrounds: options.anchors.backgrounds,
             },
             weights: options.weights,
+            colorblind_mode: options.colorblind_mode,
         },
     )?;
     let palette_candidates: Vec<Candidate> = generated_palette
@@ -97,6 +99,7 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
         &graph,
         &palette_candidates,
         options.weights,
+        options.colorblind_mode,
     ))
 }
 
@@ -182,6 +185,7 @@ mod tests {
             grid_size: GridSize::Step(255),
             anchors: PaletteAnchors::default(),
             weights: DistanceWeights::default(),
+            colorblind_mode: ColorblindMode::None,
             neighbors: 2,
             max_points: None,
         }
@@ -251,6 +255,7 @@ mod tests {
                 palette_size: 4,
                 anchors: PaletteAnchors::default(),
                 weights: DistanceWeights::default(),
+                colorblind_mode: ColorblindMode::None,
             },
         )
         .unwrap();
@@ -272,6 +277,7 @@ mod tests {
                 palette_size: 4,
                 anchors: PaletteAnchors::default(),
                 weights: DistanceWeights::default(),
+                colorblind_mode: ColorblindMode::None,
             },
         )
         .unwrap();

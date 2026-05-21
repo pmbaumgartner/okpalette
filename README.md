@@ -140,6 +140,21 @@ colors = create_palette(
 against those backgrounds. `avoid_colors` keeps exact colors out of the palette
 and uses them as distance anchors.
 
+Opt into colorblind-aware generation when pairwise palette separability should
+be tested under selected color vision deficiency simulations:
+
+```python
+colors = create_palette(12, colorblind_mode="all")
+```
+
+`colorblind_mode` may be `None`, `"protan"`, `"deutan"`, `"tritan"`, or
+`"all"`. The feature uses Machado, Oliveira, and Fernandes 2009 severity-`1.0`
+matrices on linear sRGB and optimizes the worst-case OKLab distance across
+ordinary vision and the selected simulations. It does not make a palette
+universally accessible or colorblind-safe. If you also set
+`background_contrast="high"` or `"wcag"`, WCAG contrast is still checked against
+the ordinary sRGB background, not against simulated colors.
+
 Limit hue ranges:
 
 ```python
@@ -225,6 +240,7 @@ create_palette(
     grid_size="medium",
     lightness_weight=1.0,
     chroma_weight=1.0,
+    colorblind_mode=None,
     format="hex",
 )
 ```
@@ -255,6 +271,7 @@ create_label_palette(
     grid_size="medium",
     lightness_weight=1.0,
     chroma_weight=1.0,
+    colorblind_mode=None,
     neighbors=8,
     max_points=50_000,
     format="hex",
@@ -280,6 +297,11 @@ candidate color that is farthest from the nearest anchor or selected color.
 
 Distances are measured in OKLab. Lightness, chroma, and hue constraints are
 applied through OKLab and OKLCH before colors are selected.
+
+When `colorblind_mode` is enabled, candidate distances are scored as the minimum
+of ordinary OKLab distance and the OKLab distance after each selected Machado
+2009 severity-`1.0` simulation. This is a generation objective for palettes
+tested under selected CVD simulations, not an accessibility certification.
 
 For label palettes, `okpalette` builds a weighted label-neighborhood graph from
 the input positions, then uses that graph while choosing and assigning colors.

@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use super::graph::{GraphEdge, LabelGraph};
 use crate::algorithm::DistanceWeights;
 use crate::candidates::Candidate;
-use crate::color::{Oklab, Rgb8};
+use crate::color::{ColorProfile, ColorblindMode, Rgb8};
 
 const SWAP_PASSES: usize = 2;
 const SWAP_PAIR_BUDGET: usize = 50_000;
@@ -11,7 +11,7 @@ const SWAP_PAIR_BUDGET: usize = 50_000;
 #[derive(Debug, Clone)]
 struct Assignment {
     colors: Vec<Option<Rgb8>>,
-    labs: Vec<Option<Oklab>>,
+    profiles: Vec<Option<ColorProfile>>,
     candidate_indices: Vec<Option<usize>>,
 }
 
@@ -21,9 +21,10 @@ pub(super) fn assign_generated_palette(
     graph: &LabelGraph,
     palette_candidates: &[Candidate],
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) -> Vec<Rgb8> {
     let mut available = vec![true; palette_candidates.len()];
-    let mut assignment = Assignment::new(label_count, fixed_colors);
+    let mut assignment = Assignment::new(label_count, fixed_colors, colorblind_mode);
     let order = label_processing_order(graph, fixed_colors);
 
     for label_id in order {
@@ -38,14 +39,15 @@ pub(super) fn assign_generated_palette(
             &assignment,
             graph,
             weights,
+            colorblind_mode,
         )
         .expect("available palette colors were checked before label assignment");
         let candidate = palette_candidates[candidate_index];
-        assignment.assign_generated(label_id, candidate_index, candidate);
+        assignment.assign_generated(label_id, candidate_index, candidate, colorblind_mode);
         available[candidate_index] = false;
     }
 
-    improve_with_swaps(&mut assignment, graph, weights);
+    improve_with_swaps(&mut assignment, graph, weights, colorblind_mode);
 
     assignment
         .colors
@@ -55,27 +57,41 @@ pub(super) fn assign_generated_palette(
 }
 
 impl Assignment {
-    fn new(label_count: usize, fixed_colors: &[Option<Rgb8>]) -> Self {
+    fn new(
+        label_count: usize,
+        fixed_colors: &[Option<Rgb8>],
+        colorblind_mode: ColorblindMode,
+    ) -> Self {
         let mut colors = vec![None; label_count];
-        let mut labs = vec![None; label_count];
+        let mut profiles = vec![None; label_count];
 
         for (label_id, &color) in fixed_colors.iter().enumerate() {
             if let Some(color) = color {
                 colors[label_id] = Some(color);
-                labs[label_id] = Some(color.to_oklab());
+                profiles[label_id] = Some(ColorProfile::from_rgb(color, colorblind_mode));
             }
         }
 
         Self {
             colors,
-            labs,
+            profiles,
             candidate_indices: vec![None; label_count],
         }
     }
 
-    fn assign_generated(&mut self, label_id: usize, candidate_index: usize, candidate: Candidate) {
+    fn assign_generated(
+        &mut self,
+        label_id: usize,
+        candidate_index: usize,
+        candidate: Candidate,
+        colorblind_mode: ColorblindMode,
+    ) {
         self.colors[label_id] = Some(candidate.rgb);
-        self.labs[label_id] = Some(candidate.lab);
+        self.profiles[label_id] = Some(ColorProfile::from_rgb_and_normal(
+            candidate.rgb,
+            candidate.lab,
+            colorblind_mode,
+        ));
         self.candidate_indices[label_id] = Some(candidate_index);
     }
 }
@@ -106,6 +122,7 @@ fn select_assignment_candidate(
     assignment: &Assignment,
     graph: &LabelGraph,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) -> Option<usize> {
     let mut best_index = None;
     let mut best_score = f32::NEG_INFINITY;
@@ -115,7 +132,14 @@ fn select_assignment_candidate(
             continue;
         }
 
-        let score = assigned_neighbor_distance(label_id, candidate.lab, assignment, graph, weights);
+        let score = assigned_neighbor_distance(
+            label_id,
+            ColorProfile::from_rgb_and_normal(candidate.rgb, candidate.lab, colorblind_mode),
+            assignment,
+            graph,
+            weights,
+            colorblind_mode,
+        );
         if score > best_score {
             best_score = score;
             best_index = Some(candidate_index);
@@ -127,18 +151,23 @@ fn select_assignment_candidate(
 
 fn assigned_neighbor_distance(
     label_id: usize,
-    candidate_lab: Oklab,
+    candidate_profile: ColorProfile,
     assignment: &Assignment,
     graph: &LabelGraph,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) -> f32 {
     let mut weighted_sum = 0.0;
     let mut total_weight = 0.0;
 
     for &(neighbor, edge_weight) in &graph.adjacency[label_id] {
-        if let Some(neighbor_lab) = assignment.labs[neighbor] {
-            weighted_sum +=
-                edge_weight * weights.oklab_distance_squared(candidate_lab, neighbor_lab);
+        if let Some(neighbor_profile) = assignment.profiles[neighbor] {
+            weighted_sum += edge_weight
+                * weights.color_profile_distance_squared(
+                    candidate_profile,
+                    neighbor_profile,
+                    colorblind_mode,
+                );
             total_weight += edge_weight;
         }
     }
@@ -150,7 +179,12 @@ fn assigned_neighbor_distance(
     }
 }
 
-fn improve_with_swaps(assignment: &mut Assignment, graph: &LabelGraph, weights: DistanceWeights) {
+fn improve_with_swaps(
+    assignment: &mut Assignment,
+    graph: &LabelGraph,
+    weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
+) {
     let non_fixed_labels: Vec<usize> = assignment
         .candidate_indices
         .iter()
@@ -170,7 +204,14 @@ fn improve_with_swaps(assignment: &mut Assignment, graph: &LabelGraph, weights: 
         'outer: for (left_offset, &left) in non_fixed_labels.iter().enumerate() {
             for &right in &non_fixed_labels[left_offset + 1..] {
                 evaluations += 1;
-                let delta = swap_delta(&graph.edges, &assignment.labs, left, right, weights);
+                let delta = swap_delta(
+                    &graph.edges,
+                    &assignment.profiles,
+                    left,
+                    right,
+                    weights,
+                    colorblind_mode,
+                );
                 if delta > best_delta {
                     best_delta = delta;
                     best_swap = Some((left, right));
@@ -191,20 +232,21 @@ fn improve_with_swaps(assignment: &mut Assignment, graph: &LabelGraph, weights: 
         }
 
         assignment.colors.swap(left, right);
-        assignment.labs.swap(left, right);
+        assignment.profiles.swap(left, right);
         assignment.candidate_indices.swap(left, right);
     }
 }
 
 fn swap_delta(
     edges: &[GraphEdge],
-    labs: &[Option<Oklab>],
+    profiles: &[Option<ColorProfile>],
     left_label: usize,
     right_label: usize,
     weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
 ) -> f32 {
-    let left_lab = labs[left_label].expect("left label is assigned");
-    let right_lab = labs[right_label].expect("right label is assigned");
+    let left_profile = profiles[left_label].expect("left label is assigned");
+    let right_profile = profiles[right_label].expect("right label is assigned");
     let mut before = 0.0;
     let mut after = 0.0;
 
@@ -217,25 +259,35 @@ fn swap_delta(
             continue;
         }
 
-        let edge_left_lab = labs[edge.left].expect("edge endpoint is assigned");
-        let edge_right_lab = labs[edge.right].expect("edge endpoint is assigned");
-        before += edge.weight * weights.oklab_distance_squared(edge_left_lab, edge_right_lab);
+        let edge_left_profile = profiles[edge.left].expect("edge endpoint is assigned");
+        let edge_right_profile = profiles[edge.right].expect("edge endpoint is assigned");
+        before += edge.weight
+            * weights.color_profile_distance_squared(
+                edge_left_profile,
+                edge_right_profile,
+                colorblind_mode,
+            );
 
-        let swapped_left_lab = if edge.left == left_label {
-            right_lab
+        let swapped_left_profile = if edge.left == left_label {
+            right_profile
         } else if edge.left == right_label {
-            left_lab
+            left_profile
         } else {
-            edge_left_lab
+            edge_left_profile
         };
-        let swapped_right_lab = if edge.right == left_label {
-            right_lab
+        let swapped_right_profile = if edge.right == left_label {
+            right_profile
         } else if edge.right == right_label {
-            left_lab
+            left_profile
         } else {
-            edge_right_lab
+            edge_right_profile
         };
-        after += edge.weight * weights.oklab_distance_squared(swapped_left_lab, swapped_right_lab);
+        after += edge.weight
+            * weights.color_profile_distance_squared(
+                swapped_left_profile,
+                swapped_right_profile,
+                colorblind_mode,
+            );
     }
 
     after - before
@@ -264,13 +316,26 @@ mod tests {
                 },
             ],
         };
-        let labs = vec![
-            Some(rgb(0, 0, 0).to_oklab()),
-            Some(rgb(20, 20, 20).to_oklab()),
-            Some(rgb(255, 255, 255).to_oklab()),
+        let profiles = vec![
+            Some(ColorProfile::from_rgb(rgb(0, 0, 0), ColorblindMode::None)),
+            Some(ColorProfile::from_rgb(
+                rgb(20, 20, 20),
+                ColorblindMode::None,
+            )),
+            Some(ColorProfile::from_rgb(
+                rgb(255, 255, 255),
+                ColorblindMode::None,
+            )),
         ];
 
-        let delta = swap_delta(&graph.edges, &labs, 1, 2, DistanceWeights::default());
+        let delta = swap_delta(
+            &graph.edges,
+            &profiles,
+            1,
+            2,
+            DistanceWeights::default(),
+            ColorblindMode::None,
+        );
 
         assert!(delta > 0.0);
     }

@@ -29,6 +29,7 @@ def test_public_imports_and_exports() -> None:
     assert set(getattr(okpalette, "__all__")) == {
         "BackgroundContrast",
         "BackgroundLike",
+        "ColorblindMode",
         "ColorFormat",
         "ColorLike",
         "GridSize",

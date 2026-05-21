@@ -9,6 +9,7 @@ from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 from ._types import (
     BackgroundContrast,
     BackgroundLike,
+    ColorblindMode,
     ColorFormat,
     ColorLike,
     GridSize,
@@ -22,6 +23,7 @@ _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
 _FORMATS = {"hex", "rgb", "rgb01"}
 _BACKGROUND_CONTRASTS = {"normal", "high", "wcag"}
+_COLORBLIND_MODES = {"protan", "deutan", "tritan", "all"}
 
 
 def normalize_color(color: ColorLike) -> str:
@@ -118,6 +120,16 @@ def validate_background_contrast(value: object) -> Optional[BackgroundContrast]:
         raise ValueError("background_contrast must be None, 'normal', 'high', or 'wcag'")
 
     return cast(BackgroundContrast, value)
+
+
+def validate_colorblind_mode(value: object) -> Optional[ColorblindMode]:
+    if value is None:
+        return None
+
+    if value not in _COLORBLIND_MODES:
+        raise ValueError("colorblind_mode must be None, 'protan', 'deutan', 'tritan', or 'all'")
+
+    return cast(ColorblindMode, value)
 
 
 def validate_lightness(value: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:

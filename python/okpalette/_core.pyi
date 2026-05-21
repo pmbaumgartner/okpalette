@@ -12,6 +12,7 @@ def generate_palette_rs(
     grid_step: int = ...,
     lightness_weight: float = ...,
     chroma_weight: float = ...,
+    colorblind_mode: Optional[str] = ...,
 ) -> List[str]: ...
 def generate_label_palette_rs(
     coordinates: List[float],
@@ -29,6 +30,7 @@ def generate_label_palette_rs(
     grid_step: int = ...,
     lightness_weight: float = ...,
     chroma_weight: float = ...,
+    colorblind_mode: Optional[str] = ...,
     neighbors: int = ...,
     max_points: Optional[int] = ...,
 ) -> List[str]: ...

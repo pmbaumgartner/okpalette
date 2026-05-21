@@ -17,6 +17,7 @@ from ._format import (
     resolve_grid_step,
     validate_background_contrast,
     validate_chroma,
+    validate_colorblind_mode,
     validate_format,
     validate_hue,
     validate_lightness,
@@ -35,6 +36,7 @@ from ._plot import PaletteView, palette_png, palette_svg, save_palette, view_pal
 from ._types import (
     BackgroundContrast,
     BackgroundLike,
+    ColorblindMode,
     ColorFormat,
     ColorLike,
     GridSize,
@@ -57,6 +59,7 @@ _EXTEND_KWARGS = {
     "grid_size",
     "lightness_weight",
     "chroma_weight",
+    "colorblind_mode",
     "format",
 }
 
@@ -75,6 +78,7 @@ class _PaletteOptions:
     grid_size: GridSize = "medium"
     lightness_weight: float = 1.0
     chroma_weight: float = 1.0
+    colorblind_mode: Optional[ColorblindMode] = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,7 @@ class _NormalizedPaletteOptions:
     grid_step: int
     lightness_weight: float
     chroma_weight: float
+    colorblind_mode: Optional[ColorblindMode]
 
 
 def create_palette(
@@ -104,6 +109,7 @@ def create_palette(
     grid_size: GridSize = "medium",
     lightness_weight: float = 1.0,
     chroma_weight: float = 1.0,
+    colorblind_mode: Optional[ColorblindMode] = None,
     format: ColorFormat = "hex",
 ) -> Palette:
     """Create a deterministic categorical palette."""
@@ -123,6 +129,7 @@ def create_palette(
             grid_size=grid_size,
             lightness_weight=lightness_weight,
             chroma_weight=chroma_weight,
+            colorblind_mode=colorblind_mode,
         ),
     )
     return convert_hex_palette(palette, output_format)
@@ -174,6 +181,7 @@ def create_label_palette(
     grid_size: GridSize = "medium",
     lightness_weight: float = 1.0,
     chroma_weight: float = 1.0,
+    colorblind_mode: Optional[ColorblindMode] = None,
     neighbors: int = 8,
     max_points: Optional[int] = 50_000,
     format: ColorFormat = "hex",
@@ -205,6 +213,7 @@ def create_label_palette(
             grid_size=grid_size,
             lightness_weight=lightness_weight,
             chroma_weight=chroma_weight,
+            colorblind_mode=colorblind_mode,
         ),
         neighbors=neighbors,
         max_points=max_points,
@@ -270,6 +279,7 @@ def _generate_palette_hex(
         normalized.grid_step,
         normalized.lightness_weight,
         normalized.chroma_weight,
+        normalized.colorblind_mode,
     )
 
 
@@ -306,6 +316,7 @@ def _generate_label_palette_hex(
         normalized.grid_step,
         normalized.lightness_weight,
         normalized.chroma_weight,
+        normalized.colorblind_mode,
         neighbors,
         max_points,
     )
@@ -335,6 +346,7 @@ def _extend_palette_options(
         grid_size=cast(GridSize, kwargs.get("grid_size", "medium")),
         lightness_weight=cast(float, kwargs.get("lightness_weight", 1.0)),
         chroma_weight=cast(float, kwargs.get("chroma_weight", 1.0)),
+        colorblind_mode=cast(Optional[ColorblindMode], kwargs.get("colorblind_mode")),
     )
 
 
@@ -360,6 +372,7 @@ def _normalize_palette_options(options: _PaletteOptions) -> _NormalizedPaletteOp
         options.lightness_weight,
         options.chroma_weight,
     )
+    colorblind_mode = validate_colorblind_mode(options.colorblind_mode)
     return _NormalizedPaletteOptions(
         seed_hex=seed_hex,
         avoid_hex=avoid_hex,
@@ -371,12 +384,14 @@ def _normalize_palette_options(options: _PaletteOptions) -> _NormalizedPaletteOp
         grid_step=grid_step,
         lightness_weight=lightness_weight,
         chroma_weight=chroma_weight,
+        colorblind_mode=colorblind_mode,
     )
 
 
 __all__ = [
     "BackgroundContrast",
     "BackgroundLike",
+    "ColorblindMode",
     "ColorFormat",
     "ColorLike",
     "GridSize",
