@@ -23,6 +23,137 @@ use parse::parse_hex_color;
 use pyo3::types::PyBytes;
 use render::{render_palette_png, render_palette_svg};
 
+struct CommonPaletteBridgeArgs {
+    seed_colors: Option<Vec<String>>,
+    avoid_colors: Option<Vec<String>>,
+    backgrounds: Option<Vec<String>>,
+    background_contrast: Option<String>,
+    lightness: Option<(f32, f32)>,
+    chroma: Option<(Option<f32>, Option<f32>)>,
+    hue: Option<(f32, f32)>,
+    lightness_weight: f32,
+    chroma_weight: f32,
+    colorblind_mode: Option<String>,
+}
+
+struct CommonPaletteRequest {
+    seed_colors: Vec<Rgb8>,
+    avoid_colors: Vec<Rgb8>,
+    backgrounds: Vec<Rgb8>,
+    background_contrast: Option<String>,
+    constraints: CandidateConstraints,
+    weights: DistanceWeights,
+    colorblind_mode: ColorblindMode,
+}
+
+impl CommonPaletteBridgeArgs {
+    fn into_request(self) -> Result<CommonPaletteRequest, GlasbeyError> {
+        Ok(CommonPaletteRequest {
+            seed_colors: parse_hex_colors(self.seed_colors.unwrap_or_default())?,
+            avoid_colors: parse_hex_colors(self.avoid_colors.unwrap_or_default())?,
+            backgrounds: parse_hex_colors(self.backgrounds.unwrap_or_default())?,
+            background_contrast: self.background_contrast,
+            constraints: CandidateConstraints {
+                lightness: self.lightness,
+                chroma: self.chroma,
+                hue: self.hue,
+            },
+            weights: DistanceWeights {
+                lightness: self.lightness_weight,
+                chroma: self.chroma_weight,
+            },
+            colorblind_mode: ColorblindMode::parse(self.colorblind_mode.as_deref())?,
+        })
+    }
+}
+
+impl CommonPaletteRequest {
+    fn anchors(&self) -> PaletteAnchors<'_> {
+        PaletteAnchors {
+            seed_colors: &self.seed_colors,
+            avoid_colors: &self.avoid_colors,
+            backgrounds: &self.backgrounds,
+        }
+    }
+
+    fn background_filter(&self) -> Result<BackgroundFilter<'_>, GlasbeyError> {
+        background_filter_from_mode(
+            &self.backgrounds,
+            self.background_contrast.as_deref(),
+            self.weights,
+            self.colorblind_mode,
+        )
+    }
+}
+
+struct GeneratePaletteBridgeArgs {
+    palette_size: usize,
+    grid_step: u8,
+    common: CommonPaletteBridgeArgs,
+}
+
+struct GeneratePaletteRequest {
+    palette_size: usize,
+    grid_size: GridSize,
+    common: CommonPaletteRequest,
+}
+
+impl GeneratePaletteBridgeArgs {
+    fn into_request(self) -> Result<GeneratePaletteRequest, GlasbeyError> {
+        Ok(GeneratePaletteRequest {
+            palette_size: self.palette_size,
+            grid_size: GridSize::Step(self.grid_step),
+            common: self.common.into_request()?,
+        })
+    }
+}
+
+struct GenerateLabelPaletteBridgeArgs {
+    coordinates: Vec<f64>,
+    dimension: usize,
+    label_ids: Vec<usize>,
+    label_count: usize,
+    fixed_colors: Vec<Option<String>>,
+    grid_step: u8,
+    neighbors: usize,
+    max_points: Option<usize>,
+    common: CommonPaletteBridgeArgs,
+}
+
+struct GenerateLabelPaletteRequest {
+    coordinates: Vec<f64>,
+    dimension: usize,
+    label_ids: Vec<usize>,
+    label_count: usize,
+    fixed_colors: Vec<Option<Rgb8>>,
+    grid_size: GridSize,
+    neighbors: usize,
+    max_points: Option<usize>,
+    common: CommonPaletteRequest,
+}
+
+impl GenerateLabelPaletteBridgeArgs {
+    fn into_request(self) -> Result<GenerateLabelPaletteRequest, GlasbeyError> {
+        let fixed_colors = self
+            .fixed_colors
+            .into_iter()
+            .map(|color| color.as_deref().map(parse_hex_color).transpose())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(GenerateLabelPaletteRequest {
+            coordinates: self.coordinates,
+            dimension: self.dimension,
+            label_ids: self.label_ids,
+            label_count: self.label_count,
+            fixed_colors,
+            grid_size: GridSize::Step(self.grid_step),
+            neighbors: self.neighbors,
+            max_points: self.max_points,
+            common: self.common.into_request()?,
+        })
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (
     palette_size,
@@ -54,9 +185,10 @@ fn generate_palette_rs(
     chroma_weight: f32,
     colorblind_mode: Option<String>,
 ) -> PyResult<Vec<String>> {
-    py.detach(move || {
-        generate_palette_inner(
-            palette_size,
+    let args = GeneratePaletteBridgeArgs {
+        palette_size,
+        grid_step,
+        common: CommonPaletteBridgeArgs {
             seed_colors,
             avoid_colors,
             backgrounds,
@@ -64,68 +196,40 @@ fn generate_palette_rs(
             lightness,
             chroma,
             hue,
-            grid_step,
             lightness_weight,
             chroma_weight,
             colorblind_mode,
-        )
-    })
-    .map_err(to_py_value_error)
+        },
+    };
+
+    py.detach(move || generate_palette_from_bridge_args(args))
+        .map_err(to_py_value_error)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn generate_palette_inner(
-    palette_size: usize,
-    seed_colors: Option<Vec<String>>,
-    avoid_colors: Option<Vec<String>>,
-    backgrounds: Option<Vec<String>>,
-    background_contrast: Option<String>,
-    lightness: Option<(f32, f32)>,
-    chroma: Option<(Option<f32>, Option<f32>)>,
-    hue: Option<(f32, f32)>,
-    grid_step: u8,
-    lightness_weight: f32,
-    chroma_weight: f32,
-    colorblind_mode: Option<String>,
+fn generate_palette_from_bridge_args(
+    args: GeneratePaletteBridgeArgs,
 ) -> Result<Vec<String>, GlasbeyError> {
-    let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
-    let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
-    let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
-    let colorblind_mode = ColorblindMode::parse(colorblind_mode.as_deref())?;
-    let constraints = CandidateConstraints {
-        lightness,
-        chroma,
-        hue,
-    };
-    let weights = DistanceWeights {
-        lightness: lightness_weight,
-        chroma: chroma_weight,
-    };
-    weights.validate()?;
-    let background_filter = background_filter_from_mode(
-        &backgrounds,
-        background_contrast.as_deref(),
-        weights,
-        colorblind_mode,
-    )?;
-    background_filter.validate_user_colors("seed_colors", &seed_colors)?;
+    generate_palette_inner(args.into_request()?)
+}
+
+fn generate_palette_inner(request: GeneratePaletteRequest) -> Result<Vec<String>, GlasbeyError> {
+    let common = &request.common;
+    common.weights.validate()?;
+    let background_filter = common.background_filter()?;
+    background_filter.validate_user_colors("seed_colors", &common.seed_colors)?;
     let candidates = generate_candidates_with_background_filter(
-        GridSize::Step(grid_step),
-        constraints,
+        request.grid_size,
+        common.constraints,
         background_filter,
-        palette_size,
+        request.palette_size,
     )?;
     let palette = select_palette(
         &candidates,
         PaletteOptions {
-            palette_size,
-            anchors: PaletteAnchors {
-                seed_colors: &seed_colors,
-                avoid_colors: &avoid_colors,
-                backgrounds: &backgrounds,
-            },
-            weights,
-            colorblind_mode,
+            palette_size: request.palette_size,
+            anchors: common.anchors(),
+            weights: common.weights,
+            colorblind_mode: common.colorblind_mode,
         },
     )?;
 
@@ -175,13 +279,16 @@ fn generate_label_palette_rs(
     neighbors: usize,
     max_points: Option<usize>,
 ) -> PyResult<Vec<String>> {
-    py.detach(move || {
-        generate_label_palette_inner(
-            coordinates,
-            dimension,
-            label_ids,
-            label_count,
-            fixed_colors,
+    let args = GenerateLabelPaletteBridgeArgs {
+        coordinates,
+        dimension,
+        label_ids,
+        label_count,
+        fixed_colors,
+        grid_step,
+        neighbors,
+        max_points,
+        common: CommonPaletteBridgeArgs {
             seed_colors,
             avoid_colors,
             backgrounds,
@@ -189,83 +296,45 @@ fn generate_label_palette_rs(
             lightness,
             chroma,
             hue,
-            grid_step,
             lightness_weight,
             chroma_weight,
             colorblind_mode,
-            neighbors,
-            max_points,
-        )
-    })
-    .map_err(to_py_value_error)
+        },
+    };
+
+    py.detach(move || generate_label_palette_from_bridge_args(args))
+        .map_err(to_py_value_error)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn generate_label_palette_inner(
-    coordinates: Vec<f64>,
-    dimension: usize,
-    label_ids: Vec<usize>,
-    label_count: usize,
-    fixed_colors: Vec<Option<String>>,
-    seed_colors: Option<Vec<String>>,
-    avoid_colors: Option<Vec<String>>,
-    backgrounds: Option<Vec<String>>,
-    background_contrast: Option<String>,
-    lightness: Option<(f32, f32)>,
-    chroma: Option<(Option<f32>, Option<f32>)>,
-    hue: Option<(f32, f32)>,
-    grid_step: u8,
-    lightness_weight: f32,
-    chroma_weight: f32,
-    colorblind_mode: Option<String>,
-    neighbors: usize,
-    max_points: Option<usize>,
+fn generate_label_palette_from_bridge_args(
+    args: GenerateLabelPaletteBridgeArgs,
 ) -> Result<Vec<String>, GlasbeyError> {
-    let fixed_colors = fixed_colors
-        .into_iter()
-        .map(|color| color.as_deref().map(parse_hex_color).transpose())
-        .collect::<Result<Vec<_>, _>>()?;
-    let seed_colors = parse_hex_colors(seed_colors.unwrap_or_default())?;
-    let avoid_colors = parse_hex_colors(avoid_colors.unwrap_or_default())?;
-    let backgrounds = parse_hex_colors(backgrounds.unwrap_or_default())?;
-    let colorblind_mode = ColorblindMode::parse(colorblind_mode.as_deref())?;
-    let constraints = CandidateConstraints {
-        lightness,
-        chroma,
-        hue,
-    };
-    let weights = DistanceWeights {
-        lightness: lightness_weight,
-        chroma: chroma_weight,
-    };
-    let background_filter = background_filter_from_mode(
-        &backgrounds,
-        background_contrast.as_deref(),
-        weights,
-        colorblind_mode,
-    )?;
-    background_filter.validate_user_colors("seed_colors", &seed_colors)?;
-    let fixed_anchor_colors: Vec<Rgb8> = fixed_colors.iter().flatten().copied().collect();
+    generate_label_palette_inner(args.into_request()?)
+}
+
+fn generate_label_palette_inner(
+    request: GenerateLabelPaletteRequest,
+) -> Result<Vec<String>, GlasbeyError> {
+    let common = &request.common;
+    let background_filter = common.background_filter()?;
+    background_filter.validate_user_colors("seed_colors", &common.seed_colors)?;
+    let fixed_anchor_colors: Vec<Rgb8> = request.fixed_colors.iter().flatten().copied().collect();
     background_filter.validate_user_colors("fixed_colors", &fixed_anchor_colors)?;
 
     let palette = select_label_palette(LabelPaletteOptions {
-        coordinates: &coordinates,
-        dimension,
-        label_ids: &label_ids,
-        label_count,
-        fixed_colors: &fixed_colors,
-        constraints,
+        coordinates: &request.coordinates,
+        dimension: request.dimension,
+        label_ids: &request.label_ids,
+        label_count: request.label_count,
+        fixed_colors: &request.fixed_colors,
+        constraints: common.constraints,
         background_filter,
-        grid_size: GridSize::Step(grid_step),
-        anchors: PaletteAnchors {
-            seed_colors: &seed_colors,
-            avoid_colors: &avoid_colors,
-            backgrounds: &backgrounds,
-        },
-        weights,
-        colorblind_mode,
-        neighbors,
-        max_points,
+        grid_size: request.grid_size,
+        anchors: common.anchors(),
+        weights: common.weights,
+        colorblind_mode: common.colorblind_mode,
+        neighbors: request.neighbors,
+        max_points: request.max_points,
     })?;
 
     Ok(palette.into_iter().map(Rgb8::to_hex).collect())
@@ -349,22 +418,43 @@ mod tests {
     use super::*;
     use crate::test_support::{assert_canonical_hex_palette, assert_png_dimensions};
 
+    fn common_args() -> CommonPaletteBridgeArgs {
+        CommonPaletteBridgeArgs {
+            seed_colors: None,
+            avoid_colors: None,
+            backgrounds: None,
+            background_contrast: None,
+            lightness: None,
+            chroma: None,
+            hue: None,
+            lightness_weight: 1.0,
+            chroma_weight: 1.0,
+            colorblind_mode: None,
+        }
+    }
+
+    fn palette_args(palette_size: usize) -> GeneratePaletteBridgeArgs {
+        GeneratePaletteBridgeArgs {
+            palette_size,
+            grid_step: 8,
+            common: common_args(),
+        }
+    }
+
     #[test]
     fn native_bridge_generates_canonical_hex_palette() {
-        let palette = generate_palette_inner(
-            3,
-            Some(vec!["#f00".to_owned()]),
-            None,
-            Some(vec!["#fff".to_owned()]),
-            Some("normal".to_owned()),
-            Some((0.2, 0.9)),
-            Some((Some(0.04), None)),
-            None,
-            64,
-            1.0,
-            1.0,
-            None,
-        )
+        let palette = generate_palette_from_bridge_args(GeneratePaletteBridgeArgs {
+            palette_size: 3,
+            grid_step: 64,
+            common: CommonPaletteBridgeArgs {
+                seed_colors: Some(vec!["#f00".to_owned()]),
+                backgrounds: Some(vec!["#fff".to_owned()]),
+                background_contrast: Some("normal".to_owned()),
+                lightness: Some((0.2, 0.9)),
+                chroma: Some((Some(0.04), None)),
+                ..common_args()
+            },
+        })
         .unwrap();
 
         assert_canonical_hex_palette(&palette, 3);
@@ -374,20 +464,13 @@ mod tests {
 
     #[test]
     fn native_bridge_maps_engine_errors() {
-        let error = generate_palette_inner(
-            1,
-            Some(vec!["not-a-color".to_owned()]),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            8,
-            1.0,
-            1.0,
-            None,
-        )
+        let error = generate_palette_from_bridge_args(GeneratePaletteBridgeArgs {
+            common: CommonPaletteBridgeArgs {
+                seed_colors: Some(vec!["not-a-color".to_owned()]),
+                ..common_args()
+            },
+            ..palette_args(1)
+        })
         .unwrap_err();
 
         assert!(matches!(error, GlasbeyError::InvalidHexLength { .. }));
@@ -395,9 +478,11 @@ mod tests {
 
     #[test]
     fn native_bridge_reports_insufficient_candidates() {
-        let error = generate_palette_inner(
-            9, None, None, None, None, None, None, None, 255, 1.0, 1.0, None,
-        )
+        let error = generate_palette_from_bridge_args(GeneratePaletteBridgeArgs {
+            palette_size: 9,
+            grid_step: 255,
+            common: common_args(),
+        })
         .unwrap_err();
 
         assert_eq!(
@@ -411,20 +496,14 @@ mod tests {
 
     #[test]
     fn native_bridge_rejects_invalid_colorblind_mode() {
-        let error = generate_palette_inner(
-            1,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            255,
-            1.0,
-            1.0,
-            Some("protanopia".to_owned()),
-        )
+        let error = generate_palette_from_bridge_args(GeneratePaletteBridgeArgs {
+            grid_step: 255,
+            common: CommonPaletteBridgeArgs {
+                colorblind_mode: Some("protanopia".to_owned()),
+                ..common_args()
+            },
+            ..palette_args(1)
+        })
         .unwrap_err();
 
         assert!(matches!(
@@ -438,20 +517,16 @@ mod tests {
 
     #[test]
     fn native_bridge_rejects_high_contrast_seed_failures() {
-        let error = generate_palette_inner(
-            1,
-            Some(vec!["#ffffff".to_owned()]),
-            None,
-            Some(vec!["#ffffff".to_owned()]),
-            Some("high".to_owned()),
-            None,
-            None,
-            None,
-            255,
-            1.0,
-            1.0,
-            None,
-        )
+        let error = generate_palette_from_bridge_args(GeneratePaletteBridgeArgs {
+            grid_step: 255,
+            common: CommonPaletteBridgeArgs {
+                seed_colors: Some(vec!["#ffffff".to_owned()]),
+                backgrounds: Some(vec!["#ffffff".to_owned()]),
+                background_contrast: Some("high".to_owned()),
+                ..common_args()
+            },
+            ..palette_args(1)
+        })
         .unwrap_err();
 
         assert!(matches!(
@@ -462,6 +537,25 @@ mod tests {
             }
         ));
         assert!(error.to_string().contains("#ffffff"));
+    }
+
+    #[test]
+    fn native_bridge_generates_label_palette_with_fixed_colors() {
+        let palette = generate_label_palette_from_bridge_args(GenerateLabelPaletteBridgeArgs {
+            coordinates: vec![0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            dimension: 2,
+            label_ids: vec![0, 1, 2],
+            label_count: 3,
+            fixed_colors: vec![None, Some("#ff0000".to_owned()), None],
+            grid_step: 64,
+            neighbors: 2,
+            max_points: Some(10),
+            common: common_args(),
+        })
+        .unwrap();
+
+        assert_canonical_hex_palette(&palette, 3);
+        assert_eq!(palette[1], "#ff0000");
     }
 
     #[test]
