@@ -127,6 +127,84 @@ colors = create_label_palette_from_columns(
 )
 ```
 
+## Use With Plotting Libraries
+
+`okpalette` has no required Matplotlib, Altair, or Plotly dependency. The
+default output is a list of lowercase hex strings, which all three libraries
+accept directly. Use `format="rgb01"` for Matplotlib APIs that specifically
+expect normalized RGB tuples.
+
+Matplotlib color cycles and colormaps:
+
+```python
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from okpalette import create_palette
+
+colors = create_palette(6)
+
+fig, ax = plt.subplots()
+ax.set_prop_cycle(color=colors)
+ax.plot(x, y1)
+ax.plot(x, y2)
+
+cmap = ListedColormap(create_palette(12), name="okpalette")
+ax.scatter(x, y, c=values, cmap=cmap)
+```
+
+Altair categorical scales and raw color columns:
+
+```python
+import altair as alt
+from okpalette import create_palette
+
+categories = ["control", "treated", "outlier"]
+colors = create_palette(len(categories))
+
+chart = alt.Chart(data).mark_point().encode(
+    x="x:Q",
+    y="y:Q",
+    color=alt.Color(
+        "group:N",
+        scale=alt.Scale(domain=categories, range=colors),
+    ),
+)
+
+# When a dataframe column already contains okpalette hex strings:
+chart = alt.Chart(data).mark_point().encode(
+    x="x:Q",
+    y="y:Q",
+    color=alt.Color("color:N", scale=None),
+)
+```
+
+Plotly Express discrete sequences and maps:
+
+```python
+import plotly.express as px
+from okpalette import create_palette
+
+categories = ["control", "treated", "outlier"]
+colors = create_palette(len(categories))
+color_map = dict(zip(categories, colors))
+
+fig = px.scatter(
+    data,
+    x="x",
+    y="y",
+    color="group",
+    color_discrete_sequence=colors,
+)
+
+fig = px.scatter(
+    data,
+    x="x",
+    y="y",
+    color="group",
+    color_discrete_map=color_map,
+)
+```
+
 ## Tune Appearance
 
 By default, palettes are generated without a background constraint. Pass both
