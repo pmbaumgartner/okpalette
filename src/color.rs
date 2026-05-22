@@ -28,6 +28,7 @@ pub enum ColorblindMode {
     Protan,
     Deutan,
     Tritan,
+    RedGreen,
     All,
 }
 
@@ -60,20 +61,22 @@ impl ColorblindMode {
             Some("protan") => Ok(Self::Protan),
             Some("deutan") => Ok(Self::Deutan),
             Some("tritan") => Ok(Self::Tritan),
+            Some("red-green" | "daltonism") => Ok(Self::RedGreen),
             Some("all") => Ok(Self::All),
             Some(_) => Err(GlasbeyError::InvalidConstraintRange {
                 constraint: "colorblind_mode",
-                message: "must be None, 'protan', 'deutan', 'tritan', or 'all'",
+                message:
+                    "must be None, 'protan', 'deutan', 'tritan', 'red-green', 'daltonism', or 'all'",
             }),
         }
     }
 
     pub(crate) fn includes_protan(self) -> bool {
-        matches!(self, Self::Protan | Self::All)
+        matches!(self, Self::Protan | Self::RedGreen | Self::All)
     }
 
     pub(crate) fn includes_deutan(self) -> bool {
-        matches!(self, Self::Deutan | Self::All)
+        matches!(self, Self::Deutan | Self::RedGreen | Self::All)
     }
 
     pub(crate) fn includes_tritan(self) -> bool {
@@ -304,6 +307,14 @@ mod tests {
             ColorblindMode::parse(Some("tritan")),
             Ok(ColorblindMode::Tritan)
         );
+        assert_eq!(
+            ColorblindMode::parse(Some("red-green")),
+            Ok(ColorblindMode::RedGreen)
+        );
+        assert_eq!(
+            ColorblindMode::parse(Some("daltonism")),
+            Ok(ColorblindMode::RedGreen)
+        );
         assert_eq!(ColorblindMode::parse(Some("all")), Ok(ColorblindMode::All));
         assert!(matches!(
             ColorblindMode::parse(Some("protanopia")),
@@ -342,6 +353,11 @@ mod tests {
         assert!(protan.protan.is_some());
         assert_eq!(protan.deutan, None);
         assert_eq!(protan.tritan, None);
+
+        let red_green = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::RedGreen);
+        assert!(red_green.protan.is_some());
+        assert!(red_green.deutan.is_some());
+        assert_eq!(red_green.tritan, None);
 
         let all = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::All);
         assert!(all.protan.is_some());

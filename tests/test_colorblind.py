@@ -48,6 +48,18 @@ COLORBLIND_10 = {
         "#105800",
         "#480000",
     ],
+    "red-green": [
+        "#000058",
+        "#90ff00",
+        "#7888ff",
+        "#486800",
+        "#98e0ff",
+        "#4008c8",
+        "#78b058",
+        "#283000",
+        "#407098",
+        "#004868",
+    ],
     "all": [
         "#000058",
         "#48ffd0",
@@ -63,9 +75,13 @@ COLORBLIND_10 = {
 }
 
 
-@pytest.mark.parametrize("mode", ["protan", "deutan", "tritan", "all"])
+@pytest.mark.parametrize("mode", ["protan", "deutan", "tritan", "red-green", "all"])
 def test_colorblind_mode_palette_snapshots(mode: str) -> None:
     assert create_palette(10, colorblind_mode=cast(Any, mode)) == COLORBLIND_10[mode]
+
+
+def test_daltonism_alias_matches_red_green_mode() -> None:
+    assert create_palette(10, colorblind_mode="daltonism") == COLORBLIND_10["red-green"]
 
 
 def test_all_colorblind_mode_scores_ordinary_palette_generation() -> None:
@@ -101,10 +117,10 @@ def test_extend_palette_accepts_colorblind_mode() -> None:
         grid_size=255,
         lightness=None,
         chroma=None,
-        colorblind_mode="all",
+        colorblind_mode="red-green",
     )
 
-    assert palette == ["#ff0000", "#00ff00", "#000000", "#0000ff", "#ffffff"]
+    assert palette == ["#ff0000", "#00ff00", "#000000", "#0000ff", "#00ffff"]
 
 
 @pytest.mark.parametrize("background_contrast", ["high", "wcag"])
@@ -137,7 +153,7 @@ def test_label_palette_colorblind_mode_preserves_fixed_colors() -> None:
         grid_size=255,
         lightness=None,
         chroma=None,
-        colorblind_mode="all",
+        colorblind_mode="red-green",
     )
 
     assert palette == {
@@ -162,7 +178,7 @@ def test_label_palette_from_columns_accepts_colorblind_mode() -> None:
         grid_size=255,
         lightness=None,
         chroma=None,
-        colorblind_mode="all",
+        colorblind_mode="red-green",
     )
 
     assert palette == {

@@ -1,5 +1,7 @@
 from typing import List, Optional, Tuple
 
+from ._types import ColorblindMode
+
 def generate_palette_rs(
     palette_size: int,
     seed_colors: Optional[List[str]] = ...,
@@ -12,7 +14,7 @@ def generate_palette_rs(
     grid_step: int = ...,
     lightness_weight: float = ...,
     chroma_weight: float = ...,
-    colorblind_mode: Optional[str] = ...,
+    colorblind_mode: Optional[ColorblindMode] = ...,
 ) -> List[str]: ...
 def generate_label_palette_rs(
     coordinates: List[float],
@@ -30,7 +32,7 @@ def generate_label_palette_rs(
     grid_step: int = ...,
     lightness_weight: float = ...,
     chroma_weight: float = ...,
-    colorblind_mode: Optional[str] = ...,
+    colorblind_mode: Optional[ColorblindMode] = ...,
     neighbors: int = ...,
     max_points: Optional[int] = ...,
 ) -> List[str]: ...

@@ -147,11 +147,14 @@ be tested under selected color vision deficiency simulations:
 colors = create_palette(12, colorblind_mode="all")
 ```
 
-`colorblind_mode` may be `None`, `"protan"`, `"deutan"`, `"tritan"`, or
-`"all"`. The feature uses Machado, Oliveira, and Fernandes 2009 severity-`1.0`
-matrices on linear sRGB and optimizes the worst-case OKLab distance across
-ordinary vision and the selected simulations. It does not make a palette
-universally accessible or colorblind-safe. If you also set
+`colorblind_mode` may be `None`, `"protan"`, `"deutan"`, `"tritan"`,
+`"red-green"`, or `"all"`. The `"red-green"` mode optimizes against protan and
+deutan simulations without including tritan; `"daltonism"` is accepted as a
+compatibility alias, but `"red-green"` is the preferred spelling. The feature
+uses Machado, Oliveira, and Fernandes 2009 severity-`1.0` matrices on linear
+sRGB and optimizes the worst-case OKLab distance across ordinary vision and the
+selected simulations. It does not make a palette universally accessible or
+colorblind-safe. If you also set
 `background_contrast="high"` or `"wcag"`, WCAG contrast is still checked against
 the ordinary sRGB background, not against simulated colors.
 

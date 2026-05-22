@@ -23,7 +23,7 @@ _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
 _FORMATS = {"hex", "rgb", "rgb01"}
 _BACKGROUND_CONTRASTS = {"normal", "high", "wcag"}
-_COLORBLIND_MODES = {"protan", "deutan", "tritan", "all"}
+_COLORBLIND_MODES = {"protan", "deutan", "tritan", "red-green", "daltonism", "all"}
 
 
 def normalize_color(color: ColorLike) -> str:
@@ -127,7 +127,10 @@ def validate_colorblind_mode(value: object) -> Optional[ColorblindMode]:
         return None
 
     if value not in _COLORBLIND_MODES:
-        raise ValueError("colorblind_mode must be None, 'protan', 'deutan', 'tritan', or 'all'")
+        raise ValueError(
+            "colorblind_mode must be None, 'protan', 'deutan', 'tritan', "
+            "'red-green', 'daltonism', or 'all'"
+        )
 
     return cast(ColorblindMode, value)
 

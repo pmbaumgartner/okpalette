@@ -497,6 +497,29 @@ mod tests {
     }
 
     #[test]
+    fn red_green_colorblind_mode_scores_protan_and_deutan_only() {
+        let weights = DistanceWeights::default();
+        let left = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::RedGreen);
+        let right = ColorProfile::from_rgb(rgb(0, 0, 255), ColorblindMode::RedGreen);
+
+        let expected = [
+            weights.oklab_distance_squared(left.normal, right.normal),
+            weights.oklab_distance_squared(left.protan.unwrap(), right.protan.unwrap()),
+            weights.oklab_distance_squared(left.deutan.unwrap(), right.deutan.unwrap()),
+        ]
+        .into_iter()
+        .reduce(f32::min)
+        .unwrap();
+
+        assert_eq!(left.tritan, None);
+        assert_eq!(right.tritan, None);
+        assert_eq!(
+            weights.color_profile_distance_squared(left, right, ColorblindMode::RedGreen),
+            expected
+        );
+    }
+
+    #[test]
     fn too_large_requests_after_anchor_exclusions_return_insufficient_candidates() {
         let excluded_seed = rgb(0, 0, 0);
         let excluded_avoid = rgb(255, 255, 255);
