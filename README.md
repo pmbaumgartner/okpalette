@@ -20,6 +20,18 @@ from okpalette import create_palette
 colors = create_palette(8)
 ```
 
+From the command line:
+
+```bash
+okpalette create 8
+```
+
+CLI success output is JSON only:
+
+```json
+{"colors":["#080050","#e00800","#1078ff"],"format":"hex"}
+```
+
 ## Create A Palette
 
 `create_palette()` returns lowercase hex colors by default.
@@ -62,6 +74,20 @@ Use existing colors as anchors without returning them:
 ```python
 new_colors = extend_palette(brand, 10, include_existing=False)
 ```
+
+The same basic workflows are available through the CLI:
+
+```bash
+okpalette create 10
+okpalette create 5 --format rgb
+okpalette extend 12 --color "#0057b8" --color "#ffd700"
+okpalette extend 10 --color "#0057b8" --generated-only
+```
+
+`okpalette create` and `okpalette extend` always write JSON on success, with
+the stable shape `{"colors":[...],"format":"hex"}`. For `--format rgb` and
+`--format rgb01`, tuple colors are serialized as JSON arrays. Validation and
+generation errors write a short message to stderr and leave stdout empty.
 
 ## Map Labels To Colors
 
@@ -147,6 +173,13 @@ be tested under selected color vision deficiency simulations:
 colors = create_palette(12, colorblind_mode="all")
 ```
 
+CLI:
+
+```bash
+okpalette create 12 --colorblind-mode red-green
+okpalette create 12 --colorblind-mode all
+```
+
 `colorblind_mode` may be `None`, `"protan"`, `"deutan"`, `"tritan"`,
 `"red-green"`, or `"all"`. The `"red-green"` mode optimizes against protan and
 deutan simulations without including tritan; `"daltonism"` is accepted as a
@@ -226,6 +259,21 @@ custom = create_palette(24, grid_size=12)
 
 If constraints leave too few candidates, `okpalette` raises `ValueError` with a hint
 to relax `lightness`, `chroma`, `hue`, or `grid_size`.
+
+## Agent Skill
+
+`okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
+Install it into a personal Codex or Claude skill directory:
+
+```bash
+okpalette install-skill --agent codex
+okpalette install-skill --agent claude
+```
+
+Use `--dry-run` to print the target path without writing, and `--overwrite` to
+replace an existing installed skill. The Codex installer respects `$CODEX_HOME`
+and otherwise writes under `~/.codex`; Claude skills are installed under
+`~/.claude`.
 
 ## API
 

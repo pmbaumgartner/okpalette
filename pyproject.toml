@@ -17,6 +17,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+okpalette = "okpalette._cli:main"
+
 [project.urls]
 Homepage = "https://github.com/pmbaumgartner/okpalette"
 Repository = "https://github.com/pmbaumgartner/okpalette"
