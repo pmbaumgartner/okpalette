@@ -450,3 +450,25 @@ use `max_points=None` to opt into all-points preprocessing.
 
 The result is deterministic, fast, and stable when extending a palette. It is
 not a global optimizer.
+
+## References
+
+These references describe the methods and standards that inform `okpalette`.
+They do not make generated palettes WCAG-compliant, colorblind-safe, or globally
+optimal.
+
+- Glasbey-style categorical palette generation:
+  [Colorcet categorical guide](https://colorcet.holoviz.org/user_guide/Categorical.html).
+- OKLab and OKLCH:
+  [A perceptual color space for image processing](https://bottosson.github.io/posts/oklab/)
+  and
+  [MDN OKLCH documentation](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value/oklch).
+- WCAG 2.2 contrast:
+  [WCAG 2.2](https://www.w3.org/TR/WCAG22/),
+  [Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html),
+  and
+  [relative luminance](https://www.w3.org/TR/WCAG22/#dfn-relative-luminance).
+- Color vision deficiency simulation:
+  [Machado, Oliveira, and Fernandes 2009](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/Machado_Oliveira_Fernandes_CVD_Vis2009_final.pdf)
+  and the
+  [CVD simulation project page](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html).
