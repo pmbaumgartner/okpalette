@@ -58,6 +58,10 @@ labels = ["control", "treated", "control", "outlier"]
 label_colors = create_label_palette(positions, labels)
 ```
 
+## Example
+
+![Position Aware Example](examples/output/okpalette-word-scatter.png)
+
 ## Agent Skill
 
 `okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
