@@ -99,16 +99,42 @@ impl Assignment {
 fn label_processing_order(graph: &LabelGraph, fixed_colors: &[Option<Rgb8>]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..fixed_colors.len()).collect();
     order.sort_by(|&left, &right| {
-        compare_descending_f32(graph.degree(left), graph.degree(right))
-            .then_with(|| {
-                compare_descending_f32(
-                    graph.fixed_neighbor_weight(left, fixed_colors),
-                    graph.fixed_neighbor_weight(right, fixed_colors),
-                )
-            })
-            .then_with(|| left.cmp(&right))
+        compare_descending_f32(
+            assignment_degree(graph, left),
+            assignment_degree(graph, right),
+        )
+        .then_with(|| {
+            compare_descending_f32(
+                fixed_assignment_neighbor_weight(graph, left, fixed_colors),
+                fixed_assignment_neighbor_weight(graph, right, fixed_colors),
+            )
+        })
+        .then_with(|| left.cmp(&right))
     });
     order
+}
+
+fn assignment_degree(graph: &LabelGraph, label_id: usize) -> f32 {
+    graph.adjacency[label_id]
+        .iter()
+        .map(|(_, weight)| assignment_edge_weight(*weight))
+        .sum()
+}
+
+fn fixed_assignment_neighbor_weight<T>(
+    graph: &LabelGraph,
+    label_id: usize,
+    fixed_colors: &[Option<T>],
+) -> f32 {
+    graph.adjacency[label_id]
+        .iter()
+        .filter_map(|(neighbor, weight)| fixed_colors[*neighbor].is_some().then_some(*weight))
+        .map(assignment_edge_weight)
+        .sum()
+}
+
+fn assignment_edge_weight(edge_weight: f32) -> f32 {
+    edge_weight.sqrt()
 }
 
 fn compare_descending_f32(left: f32, right: f32) -> Ordering {
@@ -162,13 +188,14 @@ fn assigned_neighbor_distance(
 
     for &(neighbor, edge_weight) in &graph.adjacency[label_id] {
         if let Some(neighbor_profile) = assignment.profiles[neighbor] {
-            weighted_sum += edge_weight
+            let assignment_weight = assignment_edge_weight(edge_weight);
+            weighted_sum += assignment_weight
                 * weights.color_profile_distance_squared(
                     candidate_profile,
                     neighbor_profile,
                     colorblind_mode,
                 );
-            total_weight += edge_weight;
+            total_weight += assignment_weight;
         }
     }
 
@@ -261,7 +288,8 @@ fn swap_delta(
 
         let edge_left_profile = profiles[edge.left].expect("edge endpoint is assigned");
         let edge_right_profile = profiles[edge.right].expect("edge endpoint is assigned");
-        before += edge.weight
+        let assignment_weight = assignment_edge_weight(edge.weight);
+        before += assignment_weight
             * weights.color_profile_distance_squared(
                 edge_left_profile,
                 edge_right_profile,
@@ -282,7 +310,7 @@ fn swap_delta(
         } else {
             edge_right_profile
         };
-        after += edge.weight
+        after += assignment_weight
             * weights.color_profile_distance_squared(
                 swapped_left_profile,
                 swapped_right_profile,
@@ -298,6 +326,33 @@ mod tests {
     use super::super::graph::{GraphEdge, LabelGraph};
     use super::*;
     use crate::test_support::rgb;
+
+    #[test]
+    fn assignment_edge_weight_flattens_normalized_graph_pressure() {
+        assert_eq!(assignment_edge_weight(1.0), 1.0);
+        assert!((assignment_edge_weight(0.25) - 0.5).abs() <= f32::EPSILON);
+    }
+
+    #[test]
+    fn label_processing_order_uses_flattened_assignment_weights() {
+        let graph = LabelGraph {
+            adjacency: vec![
+                vec![(2, 1.0)],
+                vec![(3, 0.09), (4, 0.09), (5, 0.09), (6, 0.09)],
+                vec![(0, 1.0)],
+                vec![(1, 0.09)],
+                vec![(1, 0.09)],
+                vec![(1, 0.09)],
+                vec![(1, 0.09)],
+            ],
+            edges: Vec::new(),
+        };
+        let fixed_colors = vec![None; 7];
+
+        let order = label_processing_order(&graph, &fixed_colors);
+
+        assert_eq!(order[0], 1);
+    }
 
     #[test]
     fn swap_delta_detects_improvement() {

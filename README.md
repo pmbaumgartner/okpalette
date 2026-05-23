@@ -1,8 +1,10 @@
 # okpalette
 
-Categorical color palettes for Python.
+Fast, deterministic categorical color palettes for Python.
 
 Use `okpalette` when you need distinct, stable colors for labels, plots, dashboards, or reports.
+
+## Install
 
 ```bash
 pip install okpalette
@@ -14,24 +16,18 @@ With uv:
 uv add okpalette
 ```
 
-## Python And Wheels
+## Quickstart
 
-`okpalette` supports Python 3.12 and newer. The 1.0 wheels use the Python
-`cp312-abi3` stable ABI and are built for Linux `x86_64` and `aarch64`
-manylinux2014, macOS `aarch64`, and Windows `x64`.
-
-Other platforms install from the source distribution when a wheel is not
-available, which requires Rust and the normal Python build toolchain. Intel
-macOS, musllinux, Windows ARM64, and other secondary targets are not 1.0 wheel
-targets.
+Create stable colors for categories:
 
 ```python
 from okpalette import create_palette
 
 colors = create_palette(8)
+# ["#080050", "#e00800", "#1078ff", ...]
 ```
 
-From the command line:
+Get the same kind of palette from a shell:
 
 ```bash
 okpalette create 8
@@ -43,18 +39,41 @@ CLI success output is JSON only:
 {"colors":["#080050","#e00800","#1078ff"],"format":"hex"}
 ```
 
-## Create A Palette
-
-`create_palette()` returns lowercase hex colors by default.
+Extend colors you already have:
 
 ```python
-from okpalette import create_palette
+from okpalette import extend_palette
 
-colors = create_palette(10)
-# ["#080050", "#e00800", "#1078ff", ...]
+colors = extend_palette(["#0057b8", "#ffd700"], 8)
 ```
 
-The same inputs produce the same colors, so category mappings stay stable across runs.
+Use position-aware label colors when nearby labels should be easier to tell apart:
+
+```python
+from okpalette import create_label_palette
+
+positions = [(0.0, 0.0), (0.2, 0.0), (5.0, 0.0), (5.2, 0.0)]
+labels = ["control", "treated", "control", "outlier"]
+
+label_colors = create_label_palette(positions, labels)
+```
+
+## Agent Skill
+
+`okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
+Install it into a personal Codex or Claude skill directory:
+
+```bash
+okpalette install-skill --agent codex
+okpalette install-skill --agent claude
+```
+
+Use `--dry-run` to print the target path without writing, and `--overwrite` to
+replace an existing installed skill. The Codex installer respects `$CODEX_HOME`
+and otherwise writes under `~/.codex`; Claude skills are installed under
+`~/.claude`.
+
+### Formats
 
 Use RGB tuples when that fits your plotting library better:
 
@@ -204,19 +223,13 @@ fig = px.scatter(
     x="x",
     y="y",
     color="group",
-    color_discrete_sequence=colors,
-)
-
-fig = px.scatter(
-    data,
-    x="x",
-    y="y",
-    color="group",
     color_discrete_map=color_map,
 )
 ```
 
 ## Tune Appearance
+
+### Background Contrast 
 
 By default, palettes are generated without a background constraint. Pass both
 `background` and `background_contrast` when you want colors separated from a
@@ -229,15 +242,7 @@ colors = create_palette(
     32,
     background="#ffffff",
     background_contrast="normal",
-    lightness=(0.20, 0.75),
-    chroma=(0.05, None),
 )
-```
-
-Leave background filtering off:
-
-```python
-colors = create_palette(8, lightness=None, chroma=None)
 ```
 
 Avoid other colors:
@@ -254,6 +259,8 @@ colors = create_palette(
 `background` accepts one color or a sequence of colors and filters candidates
 against those backgrounds. `avoid_colors` keeps exact colors out of the palette
 and uses them as distance anchors.
+
+### Colorblind-aware generation 
 
 Opt into colorblind-aware generation when pairwise palette separability should
 be tested under selected color vision deficiency simulations:
@@ -280,7 +287,7 @@ colorblind-safe. If you also set
 `background_contrast="high"` or `"wcag"`, WCAG contrast is still checked against
 the ordinary sRGB background, not against simulated colors.
 
-Limit hue ranges:
+### Limit hue ranges
 
 ```python
 warm = create_palette(10, hue=(330, 100))
@@ -320,20 +327,6 @@ svg = palette_svg(colors)
 png = palette_png(colors)
 ```
 
-## Color Inputs
-
-Accepted color inputs:
-
-```python
-"#0fA"
-"00ffaa"
-(255, 128, 0)
-(1.0, 0.5, 0.0)
-```
-
-Integer RGB tuples use `0..255`. Normalized RGB tuples use floats in `0.0..1.0`.
-Ambiguous integer tuples such as `(1, 0, 0)` are rejected; write `(1.0, 0.0, 0.0)`
-for normalized RGB.
 
 ## Grid Size
 
@@ -349,20 +342,6 @@ custom = create_palette(24, grid_size=12)
 If constraints leave too few candidates, `okpalette` raises `ValueError` with a hint
 to relax `lightness`, `chroma`, `hue`, or `grid_size`.
 
-## Agent Skill
-
-`okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
-Install it into a personal Codex or Claude skill directory:
-
-```bash
-okpalette install-skill --agent codex
-okpalette install-skill --agent claude
-```
-
-Use `--dry-run` to print the target path without writing, and `--overwrite` to
-replace an existing installed skill. The Codex installer respects `$CODEX_HOME`
-and otherwise writes under `~/.codex`; Claude skills are installed under
-`~/.claude`.
 
 ## API
 
@@ -450,6 +429,17 @@ use `max_points=None` to opt into all-points preprocessing.
 
 The result is deterministic, fast, and stable when extending a palette. It is
 not a global optimizer.
+
+## Python And Wheels
+
+`okpalette` supports Python 3.12 and newer. Prebuilt wheels use the Python
+`cp312-abi3` stable ABI and are built for Linux `x86_64` and `aarch64`
+manylinux2014, macOS `aarch64`, and Windows `x64`.
+
+Other platforms install from the source distribution when a wheel is not
+available, which requires Rust and the normal Python build toolchain. Intel
+macOS, musllinux, Windows ARM64, and other secondary targets are not prebuilt
+wheel targets.
 
 ## References
 

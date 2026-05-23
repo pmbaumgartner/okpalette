@@ -136,6 +136,26 @@ def test_position_aware_fixture_beats_first_seen_assignment(
     assert _fixture_quality(position_aware) > _fixture_quality(first_seen)
 
 
+def test_label_palette_separates_salient_grid_neighbors() -> None:
+    positions: list[tuple[float, float]] = []
+    labels: list[str] = []
+    for row in range(3):
+        for column in range(3):
+            label = f"r{row + 1}c{column + 1}"
+            for dx in (-0.1, 0.0, 0.1):
+                for dy in (-0.1, 0.0, 0.1):
+                    positions.append((float(column) + dx, -float(row) + dy))
+                    labels.append(label)
+
+    palette = create_label_palette(positions, labels, neighbors=4, max_points=None)
+
+    target_distances = [
+        _oklab_distance(palette["r2c2"], palette["r2c3"]),
+        _oklab_distance(palette["r2c2"], palette["r3c2"]),
+    ]
+    assert min(target_distances) > 0.55
+
+
 def test_label_palette_preserves_palette_set_with_background_contrast(
     separated_label_fixture: tuple[list[tuple[float, float]], list[str]],
 ) -> None:
@@ -182,6 +202,10 @@ def _oklab_distance_squared(left: str, right: str) -> float:
     return sum(
         (left_value - right_value) ** 2 for left_value, right_value in zip(left_lab, right_lab)
     )
+
+
+def _oklab_distance(left: object, right: object) -> float:
+    return math.sqrt(_oklab_distance_squared(cast(str, left), cast(str, right)))
 
 
 def _hex_to_oklab(color: str) -> tuple[float, float, float]:

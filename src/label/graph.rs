@@ -161,24 +161,6 @@ impl LabelGraph {
 
         Self { adjacency, edges }
     }
-
-    pub(super) fn degree(&self, label_id: usize) -> f32 {
-        self.adjacency[label_id]
-            .iter()
-            .map(|(_, weight)| *weight)
-            .sum()
-    }
-
-    pub(super) fn fixed_neighbor_weight<T>(
-        &self,
-        label_id: usize,
-        fixed_colors: &[Option<T>],
-    ) -> f32 {
-        self.adjacency[label_id]
-            .iter()
-            .filter_map(|(neighbor, weight)| fixed_colors[*neighbor].is_some().then_some(*weight))
-            .sum()
-    }
 }
 
 #[cfg(test)]
