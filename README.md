@@ -33,6 +33,12 @@ Get the same kind of palette from a shell:
 okpalette create 8
 ```
 
+Works great as a [uv tool](https://docs.astral.sh/uv/concepts/tools/):
+
+```bash
+uvx okpalette create 8
+```
+
 CLI success output is JSON only:
 
 ```json
