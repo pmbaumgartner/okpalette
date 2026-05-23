@@ -14,6 +14,17 @@ With uv:
 uv add okpalette
 ```
 
+## Python And Wheels
+
+`okpalette` supports Python 3.12 and newer. The 1.0 wheels use the Python
+`cp312-abi3` stable ABI and are built for Linux `x86_64` and `aarch64`
+manylinux2014, macOS `aarch64`, and Windows `x64`.
+
+Other platforms install from the source distribution when a wheel is not
+available, which requires Rust and the normal Python build toolchain. Intel
+macOS, musllinux, Windows ARM64, and other secondary targets are not 1.0 wheel
+targets.
+
 ```python
 from okpalette import create_palette
 
