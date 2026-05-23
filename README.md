@@ -458,6 +458,7 @@ They do not make generated palettes WCAG-compliant, colorblind-safe, or globally
 optimal.
 
 - Glasbey-style categorical palette generation:
+  [lmcinnes/glasbey](https://github.com/lmcinnes/glasbey) and the
   [Colorcet categorical guide](https://colorcet.holoviz.org/user_guide/Categorical.html).
 - OKLab and OKLCH:
   [A perceptual color space for image processing](https://bottosson.github.io/posts/oklab/)
