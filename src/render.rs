@@ -3,6 +3,7 @@ use crate::error::{GlasbeyError, Result};
 
 const MAX_IMAGE_BYTES: usize = 100 * 1024 * 1024;
 
+/// Render a palette as an SVG string containing equal-width color swatches.
 pub fn render_palette_svg(colors: &[Rgb8], width: u32, height: u32) -> Result<String> {
     validate_render_request(colors, width, height)?;
     let mut svg = String::new();
@@ -22,6 +23,7 @@ pub fn render_palette_svg(colors: &[Rgb8], width: u32, height: u32) -> Result<St
     Ok(svg)
 }
 
+/// Render a palette as RGB PNG bytes containing equal-width color swatches.
 pub fn render_palette_png(colors: &[Rgb8], width: u32, height: u32) -> Result<Vec<u8>> {
     validate_render_request(colors, width, height)?;
     let row_bytes = usize::try_from(width)

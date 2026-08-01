@@ -1,20 +1,23 @@
-use crate::algorithm::DistanceWeights;
-use crate::color::{wcag_contrast_ratio, ColorProfile, ColorblindMode, Oklab, Rgb8};
+use crate::color::{
+    relative_luminance_srgb, wcag_contrast_ratio, wcag_contrast_ratio_from_luminance, ColorProfile,
+    ColorblindMode, Oklab, Rgb8,
+};
+use crate::distance::DistanceWeights;
 use crate::error::{GlasbeyError, Result};
 
-pub const NORMAL_BACKGROUND_DISTANCE_SQUARED: f32 = 0.006;
-pub const WCAG_NON_TEXT_CONTRAST_RATIO: f64 = 3.0;
+pub(crate) const NORMAL_BACKGROUND_DISTANCE_SQUARED: f32 = 0.006;
+pub(crate) const WCAG_NON_TEXT_CONTRAST_RATIO: f64 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Candidate {
-    pub rgb: Rgb8,
-    pub lab: Oklab,
-    pub chroma: f32,
-    pub hue: f32,
+pub(crate) struct Candidate {
+    pub(crate) rgb: Rgb8,
+    pub(crate) lab: Oklab,
+    pub(crate) chroma: f32,
+    pub(crate) hue: f32,
 }
 
 impl Candidate {
-    pub fn from_rgb(rgb: Rgb8) -> Self {
+    pub(crate) fn from_rgb(rgb: Rgb8) -> Self {
         let lab = rgb.to_oklab();
         let oklch = lab.to_oklch();
         Self {
@@ -27,22 +30,50 @@ impl Candidate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+/// Resolution of the RGB candidate grid searched by a [`PaletteGenerator`](crate::PaletteGenerator).
 pub enum GridSize {
+    /// Search channels in steps of 16 for fast, lower-resolution generation.
     Coarse,
+    /// Search channels in steps of 8; this is the default.
     Medium,
+    /// Search channels in steps of 4 for a larger, slower search.
     Fine,
+    /// Search channels using the given nonzero step in `1..=255`.
     Step(u8),
 }
 
+/// Validated inclusive OKLab lightness bounds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightnessRange {
+    minimum: f32,
+    maximum: f32,
+}
+
+/// Validated inclusive OKLCH chroma bounds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChromaRange {
+    minimum: Option<f32>,
+    maximum: Option<f32>,
+}
+
+/// Validated inclusive OKLCH hue bounds, which may wrap around zero.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HueRange {
+    start: f32,
+    end: f32,
+}
+
+/// Optional validated bounds applied when constructing candidate colors.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct CandidateConstraints {
-    pub lightness: Option<(f32, f32)>,
-    pub chroma: Option<(Option<f32>, Option<f32>)>,
-    pub hue: Option<(f32, f32)>,
+    lightness: Option<LightnessRange>,
+    chroma: Option<ChromaRange>,
+    hue: Option<HueRange>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub enum BackgroundFilter<'a> {
+pub(crate) enum BackgroundFilter<'a> {
     #[default]
     None,
     NormalOklabDistance {
@@ -57,8 +88,23 @@ pub enum BackgroundFilter<'a> {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum PreparedBackgroundFilter {
+    None,
+    NormalOklabDistance {
+        background_profiles: Vec<ColorProfile>,
+        min_distance_squared: f32,
+        weights: DistanceWeights,
+        colorblind_mode: ColorblindMode,
+    },
+    WcagNonTextContrast {
+        background_luminances: Vec<f64>,
+        min_ratio: f64,
+    },
+}
+
 impl GridSize {
-    pub fn step(self) -> Result<u8> {
+    pub(crate) fn step(self) -> Result<u8> {
         match self {
             Self::Coarse => Ok(16),
             Self::Medium => Ok(8),
@@ -69,7 +115,163 @@ impl GridSize {
     }
 }
 
-pub fn generate_candidates(
+impl LightnessRange {
+    /// Create inclusive lightness bounds in `0.0..=1.0`.
+    pub fn new(minimum: f32, maximum: f32) -> Result<Self> {
+        validate_finite_bounds("lightness", minimum, maximum)?;
+        if minimum < 0.0 || maximum > 1.0 {
+            return Err(GlasbeyError::InvalidConstraintRange {
+                constraint: "lightness",
+                message: "bounds are outside the allowed range",
+            });
+        }
+        Ok(Self { minimum, maximum })
+    }
+
+    /// Return the inclusive minimum lightness.
+    pub const fn minimum(self) -> f32 {
+        self.minimum
+    }
+
+    /// Return the inclusive maximum lightness.
+    pub const fn maximum(self) -> f32 {
+        self.maximum
+    }
+
+    fn contains(self, value: f32) -> bool {
+        value >= self.minimum && value <= self.maximum
+    }
+}
+
+impl ChromaRange {
+    /// Create inclusive chroma bounds with at least one finite, non-negative endpoint.
+    pub fn new(minimum: Option<f32>, maximum: Option<f32>) -> Result<Self> {
+        if minimum.is_none() && maximum.is_none() {
+            return Err(GlasbeyError::InvalidConstraintRange {
+                constraint: "chroma",
+                message: "at least one bound must be provided",
+            });
+        }
+        validate_non_negative_bound("chroma", "minimum", minimum)?;
+        validate_non_negative_bound("chroma", "maximum", maximum)?;
+        if let (Some(minimum), Some(maximum)) = (minimum, maximum) {
+            if minimum > maximum {
+                return Err(GlasbeyError::InvalidConstraintRange {
+                    constraint: "chroma",
+                    message: "minimum must be less than or equal to maximum",
+                });
+            }
+        }
+        Ok(Self { minimum, maximum })
+    }
+
+    /// Return the optional inclusive minimum chroma.
+    pub const fn minimum(self) -> Option<f32> {
+        self.minimum
+    }
+
+    /// Return the optional inclusive maximum chroma.
+    pub const fn maximum(self) -> Option<f32> {
+        self.maximum
+    }
+
+    fn contains(self, value: f32) -> bool {
+        self.minimum.is_none_or(|minimum| value >= minimum)
+            && self.maximum.is_none_or(|maximum| value <= maximum)
+    }
+}
+
+impl HueRange {
+    /// Create inclusive hue bounds in degrees; `start > end` wraps around zero.
+    pub fn new(start: f32, end: f32) -> Result<Self> {
+        validate_hue_bound(start)?;
+        validate_hue_bound(end)?;
+        Ok(Self { start, end })
+    }
+
+    /// Return the inclusive starting hue in degrees.
+    pub const fn start(self) -> f32 {
+        self.start
+    }
+
+    /// Return the inclusive ending hue in degrees.
+    pub const fn end(self) -> f32 {
+        self.end
+    }
+
+    fn contains(self, hue: f32) -> bool {
+        if self.start <= self.end {
+            hue >= self.start && hue <= self.end
+        } else {
+            hue >= self.start || hue <= self.end
+        }
+    }
+}
+
+impl CandidateConstraints {
+    /// Create constraints with no lightness, chroma, or hue restrictions.
+    pub const fn new() -> Self {
+        Self {
+            lightness: None,
+            chroma: None,
+            hue: None,
+        }
+    }
+
+    /// Apply validated lightness bounds.
+    #[must_use]
+    pub const fn with_lightness(mut self, range: LightnessRange) -> Self {
+        self.lightness = Some(range);
+        self
+    }
+
+    /// Apply validated chroma bounds.
+    #[must_use]
+    pub const fn with_chroma(mut self, range: ChromaRange) -> Self {
+        self.chroma = Some(range);
+        self
+    }
+
+    /// Apply validated hue bounds.
+    #[must_use]
+    pub const fn with_hue(mut self, range: HueRange) -> Self {
+        self.hue = Some(range);
+        self
+    }
+
+    /// Return the configured lightness bounds.
+    pub const fn lightness(self) -> Option<LightnessRange> {
+        self.lightness
+    }
+
+    /// Return the configured chroma bounds.
+    pub const fn chroma(self) -> Option<ChromaRange> {
+        self.chroma
+    }
+
+    /// Return the configured hue bounds.
+    pub const fn hue(self) -> Option<HueRange> {
+        self.hue
+    }
+
+    pub(crate) fn palette_defaults() -> Self {
+        Self::new()
+            .with_lightness(LightnessRange::new(0.20, 0.90).expect("valid default lightness"))
+            .with_chroma(ChromaRange::new(Some(0.04), None).expect("valid default minimum chroma"))
+    }
+
+    fn allows(self, candidate: Candidate) -> bool {
+        self.lightness
+            .is_none_or(|range| range.contains(candidate.lab.l))
+            && self
+                .chroma
+                .is_none_or(|range| range.contains(candidate.chroma))
+            && self.hue.is_none_or(|range| range.contains(candidate.hue))
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn generate_candidates(
     grid_size: GridSize,
     constraints: CandidateConstraints,
     requested_palette_size: usize,
@@ -82,14 +284,13 @@ pub fn generate_candidates(
     )
 }
 
-pub fn generate_candidates_with_background_filter(
+pub(crate) fn generate_candidates_with_background_filter(
     grid_size: GridSize,
     constraints: CandidateConstraints,
     background_filter: BackgroundFilter<'_>,
     requested_palette_size: usize,
 ) -> Result<Vec<Candidate>> {
-    constraints.validate()?;
-    background_filter.validate()?;
+    let background_filter = background_filter.prepare()?;
 
     let channel_values = channel_values(grid_size.step()?);
     let mut candidates =
@@ -119,13 +320,14 @@ pub fn generate_candidates_with_background_filter(
 }
 
 impl BackgroundFilter<'_> {
-    pub(crate) fn validate(self) -> Result<()> {
+    fn prepare(self) -> Result<PreparedBackgroundFilter> {
         match self {
-            Self::None => Ok(()),
+            Self::None => Ok(PreparedBackgroundFilter::None),
             Self::NormalOklabDistance {
+                backgrounds,
                 min_distance_squared,
                 weights,
-                ..
+                colorblind_mode,
             } => {
                 if !min_distance_squared.is_finite() || min_distance_squared < 0.0 {
                     return Err(GlasbeyError::InvalidConstraintRange {
@@ -134,50 +336,34 @@ impl BackgroundFilter<'_> {
                             "contrast distance must be finite and greater than or equal to zero",
                     });
                 }
-
-                weights.validate()
+                Ok(PreparedBackgroundFilter::NormalOklabDistance {
+                    background_profiles: backgrounds
+                        .iter()
+                        .map(|&background| ColorProfile::from_rgb(background, colorblind_mode))
+                        .collect(),
+                    min_distance_squared,
+                    weights,
+                    colorblind_mode,
+                })
             }
-            Self::WcagNonTextContrast { min_ratio, .. } => {
+            Self::WcagNonTextContrast {
+                backgrounds,
+                min_ratio,
+            } => {
                 if !min_ratio.is_finite() || min_ratio <= 0.0 {
                     return Err(GlasbeyError::InvalidConstraintRange {
                         constraint: "background_contrast",
                         message: "WCAG contrast ratio must be finite and greater than zero",
                     });
                 }
-
-                Ok(())
-            }
-        }
-    }
-
-    fn allows(self, candidate: Candidate) -> bool {
-        match self {
-            Self::None => true,
-            Self::NormalOklabDistance {
-                backgrounds,
-                min_distance_squared,
-                weights,
-                colorblind_mode,
-            } => {
-                let candidate_profile = ColorProfile::from_rgb_and_normal(
-                    candidate.rgb,
-                    candidate.lab,
-                    colorblind_mode,
-                );
-                backgrounds.iter().all(|&background| {
-                    weights.color_profile_distance_squared(
-                        candidate_profile,
-                        ColorProfile::from_rgb(background, colorblind_mode),
-                        colorblind_mode,
-                    ) >= min_distance_squared
+                Ok(PreparedBackgroundFilter::WcagNonTextContrast {
+                    background_luminances: backgrounds
+                        .iter()
+                        .map(|&background| relative_luminance_srgb(background))
+                        .collect(),
+                    min_ratio,
                 })
             }
-            Self::WcagNonTextContrast {
-                backgrounds,
-                min_ratio,
-            } => backgrounds
-                .iter()
-                .all(|&background| wcag_contrast_ratio(candidate.rgb, background) >= min_ratio),
         }
     }
 
@@ -209,61 +395,37 @@ impl BackgroundFilter<'_> {
     }
 }
 
-impl CandidateConstraints {
-    fn validate(self) -> Result<()> {
-        if let Some((min, max)) = self.lightness {
-            validate_required_range("lightness", min, max, 0.0, 1.0)?;
-        }
-
-        if let Some((min, max)) = self.chroma {
-            validate_optional_bound("chroma", "minimum", min)?;
-            validate_optional_bound("chroma", "maximum", max)?;
-            if let (Some(min), Some(max)) = (min, max) {
-                if min > max {
-                    return Err(GlasbeyError::InvalidConstraintRange {
-                        constraint: "chroma",
-                        message: "minimum must be less than or equal to maximum",
-                    });
-                }
+impl PreparedBackgroundFilter {
+    fn allows(&self, candidate: Candidate) -> bool {
+        match self {
+            Self::None => true,
+            Self::NormalOklabDistance {
+                background_profiles,
+                min_distance_squared,
+                weights,
+                colorblind_mode,
+            } => {
+                let candidate_profile = ColorProfile::from_rgb_and_normal(
+                    candidate.rgb,
+                    candidate.lab,
+                    *colorblind_mode,
+                );
+                background_profiles.iter().all(|&background_profile| {
+                    weights.color_profile_distance_squared(candidate_profile, background_profile)
+                        >= *min_distance_squared
+                })
+            }
+            Self::WcagNonTextContrast {
+                background_luminances,
+                min_ratio,
+            } => {
+                let candidate_luminance = relative_luminance_srgb(candidate.rgb);
+                background_luminances.iter().all(|&background_luminance| {
+                    wcag_contrast_ratio_from_luminance(candidate_luminance, background_luminance)
+                        >= *min_ratio
+                })
             }
         }
-
-        if let Some((start, end)) = self.hue {
-            validate_hue_bound(start)?;
-            validate_hue_bound(end)?;
-        }
-
-        Ok(())
-    }
-
-    fn allows(self, candidate: Candidate) -> bool {
-        if let Some((min, max)) = self.lightness {
-            if candidate.lab.l < min || candidate.lab.l > max {
-                return false;
-            }
-        }
-
-        if let Some((min, max)) = self.chroma {
-            if let Some(min) = min {
-                if candidate.chroma < min {
-                    return false;
-                }
-            }
-
-            if let Some(max) = max {
-                if candidate.chroma > max {
-                    return false;
-                }
-            }
-        }
-
-        if let Some((start, end)) = self.hue {
-            if !hue_in_range(candidate.hue, start, end) {
-                return false;
-            }
-        }
-
-        true
     }
 }
 
@@ -284,28 +446,14 @@ fn channel_values(step: u8) -> Vec<u8> {
     values
 }
 
-fn validate_required_range(
-    constraint: &'static str,
-    min: f32,
-    max: f32,
-    allowed_min: f32,
-    allowed_max: f32,
-) -> Result<()> {
-    if !min.is_finite() || !max.is_finite() {
+fn validate_finite_bounds(constraint: &'static str, minimum: f32, maximum: f32) -> Result<()> {
+    if !minimum.is_finite() || !maximum.is_finite() {
         return Err(GlasbeyError::InvalidConstraintRange {
             constraint,
             message: "bounds must be finite",
         });
     }
-
-    if min < allowed_min || max > allowed_max {
-        return Err(GlasbeyError::InvalidConstraintRange {
-            constraint,
-            message: "bounds are outside the allowed range",
-        });
-    }
-
-    if min > max {
+    if minimum > maximum {
         return Err(GlasbeyError::InvalidConstraintRange {
             constraint,
             message: "minimum must be less than or equal to maximum",
@@ -315,7 +463,7 @@ fn validate_required_range(
     Ok(())
 }
 
-fn validate_optional_bound(
+fn validate_non_negative_bound(
     constraint: &'static str,
     label: &'static str,
     value: Option<f32>,
@@ -361,14 +509,6 @@ fn validate_hue_bound(value: f32) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn hue_in_range(hue: f32, start: f32, end: f32) -> bool {
-    if start <= end {
-        hue >= start && hue <= end
-    } else {
-        hue >= start || hue <= end
-    }
 }
 
 #[cfg(test)]
@@ -446,15 +586,13 @@ mod tests {
 
     #[test]
     fn filters_by_lightness() {
-        let dark = small_candidates(CandidateConstraints {
-            lightness: Some((0.0, 0.1)),
-            ..CandidateConstraints::default()
-        })
+        let dark = small_candidates(
+            CandidateConstraints::new().with_lightness(LightnessRange::new(0.0, 0.1).unwrap()),
+        )
         .unwrap();
-        let light = small_candidates(CandidateConstraints {
-            lightness: Some((0.99, 1.0)),
-            ..CandidateConstraints::default()
-        })
+        let light = small_candidates(
+            CandidateConstraints::new().with_lightness(LightnessRange::new(0.99, 1.0).unwrap()),
+        )
         .unwrap();
 
         assert_eq!(rgb_values(&dark), vec![rgb(0, 0, 0)]);
@@ -463,15 +601,13 @@ mod tests {
 
     #[test]
     fn filters_by_chroma() {
-        let neutrals = small_candidates(CandidateConstraints {
-            chroma: Some((None, Some(0.01))),
-            ..CandidateConstraints::default()
-        })
+        let neutrals = small_candidates(
+            CandidateConstraints::new().with_chroma(ChromaRange::new(None, Some(0.01)).unwrap()),
+        )
         .unwrap();
-        let saturated = small_candidates(CandidateConstraints {
-            chroma: Some((Some(0.1), None)),
-            ..CandidateConstraints::default()
-        })
+        let saturated = small_candidates(
+            CandidateConstraints::new().with_chroma(ChromaRange::new(Some(0.1), None).unwrap()),
+        )
         .unwrap();
 
         assert_eq!(
@@ -484,10 +620,9 @@ mod tests {
 
     #[test]
     fn filters_by_non_wrapping_hue_range() {
-        let candidates = small_candidates(CandidateConstraints {
-            hue: Some((100.0, 180.0)),
-            ..CandidateConstraints::default()
-        })
+        let candidates = small_candidates(
+            CandidateConstraints::new().with_hue(HueRange::new(100.0, 180.0).unwrap()),
+        )
         .unwrap();
         let rgbs = rgb_values(&candidates);
 
@@ -497,10 +632,9 @@ mod tests {
 
     #[test]
     fn filters_by_wrapping_hue_range() {
-        let candidates = small_candidates(CandidateConstraints {
-            hue: Some((330.0, 40.0)),
-            ..CandidateConstraints::default()
-        })
+        let candidates = small_candidates(
+            CandidateConstraints::new().with_hue(HueRange::new(330.0, 40.0).unwrap()),
+        )
         .unwrap();
         let rgbs = rgb_values(&candidates);
 
@@ -572,39 +706,30 @@ mod tests {
 
     #[test]
     fn rejects_invalid_constraint_ranges() {
-        for constraints in [
-            CandidateConstraints {
-                lightness: Some((0.8, 0.2)),
-                ..CandidateConstraints::default()
-            },
-            CandidateConstraints {
-                lightness: Some((-0.1, 0.2)),
-                ..CandidateConstraints::default()
-            },
-            CandidateConstraints {
-                chroma: Some((Some(0.5), Some(0.1))),
-                ..CandidateConstraints::default()
-            },
-            CandidateConstraints {
-                chroma: Some((Some(-0.1), None)),
-                ..CandidateConstraints::default()
-            },
-            CandidateConstraints {
-                hue: Some((-1.0, 100.0)),
-                ..CandidateConstraints::default()
-            },
-            CandidateConstraints {
-                hue: Some((0.0, 361.0)),
-                ..CandidateConstraints::default()
-            },
+        for result in [
+            LightnessRange::new(0.8, 0.2),
+            LightnessRange::new(-0.1, 0.2),
         ] {
-            assert!(
-                matches!(
-                    generate_candidates(GridSize::Step(255), constraints, 0),
-                    Err(GlasbeyError::InvalidConstraintRange { .. })
-                ),
-                "{constraints:?} should fail with invalid constraint range"
-            );
+            assert!(matches!(
+                result,
+                Err(GlasbeyError::InvalidConstraintRange { .. })
+            ));
+        }
+        for result in [
+            ChromaRange::new(Some(0.5), Some(0.1)),
+            ChromaRange::new(Some(-0.1), None),
+            ChromaRange::new(None, None),
+        ] {
+            assert!(matches!(
+                result,
+                Err(GlasbeyError::InvalidConstraintRange { .. })
+            ));
+        }
+        for result in [HueRange::new(-1.0, 100.0), HueRange::new(0.0, 361.0)] {
+            assert!(matches!(
+                result,
+                Err(GlasbeyError::InvalidConstraintRange { .. })
+            ));
         }
     }
 

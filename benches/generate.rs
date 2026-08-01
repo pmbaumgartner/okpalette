@@ -1,9 +1,7 @@
 use std::{hint::black_box, time::Duration};
 
-use _core::algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
-use _core::candidates::{generate_candidates, CandidateConstraints, GridSize};
-use _core::color::{ColorblindMode, Rgb8};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
+use okpalette::{GridSize, PaletteGenerator, Rgb8};
 
 const BENCH_CASES: &[(usize, &str, GridSize)] = &[
     (32, "medium", GridSize::Medium),
@@ -12,27 +10,10 @@ const BENCH_CASES: &[(usize, &str, GridSize)] = &[
     (256, "fine", GridSize::Fine),
 ];
 
-fn default_constraints() -> CandidateConstraints {
-    CandidateConstraints {
-        lightness: Some((0.20, 0.90)),
-        chroma: Some((Some(0.04), None)),
-        hue: None,
-    }
-}
-
-fn default_options(palette_size: usize) -> PaletteOptions<'static> {
-    PaletteOptions {
-        palette_size,
-        anchors: PaletteAnchors::default(),
-        weights: DistanceWeights::default(),
-        colorblind_mode: ColorblindMode::None,
-    }
-}
-
 fn generate_palette_hex(palette_size: usize, grid_size: GridSize) -> Vec<String> {
-    let candidates = generate_candidates(grid_size, default_constraints(), palette_size)
-        .expect("benchmark constraints should leave enough candidates");
-    let palette = select_palette(&candidates, default_options(palette_size))
+    let palette = PaletteGenerator::new()
+        .grid_size(grid_size)
+        .generate(palette_size)
         .expect("benchmark palette generation should succeed");
 
     palette.into_iter().map(Rgb8::to_hex).collect()

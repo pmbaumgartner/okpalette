@@ -2,36 +2,47 @@ mod assignment;
 mod graph;
 mod sampling;
 
-use crate::algorithm::{select_palette, DistanceWeights, PaletteAnchors, PaletteOptions};
+use crate::algorithm::{select_palette, PaletteAnchors, PaletteOptions};
 use crate::candidates::{
     generate_candidates_with_background_filter, BackgroundFilter, Candidate, CandidateConstraints,
     GridSize,
 };
 use crate::color::{ColorblindMode, Rgb8};
+use crate::distance::DistanceWeights;
 use crate::error::{GlasbeyError, Result};
 
 use self::assignment::assign_generated_palette;
 use self::graph::build_label_graph;
 
 #[derive(Debug, Clone, Copy)]
-pub struct LabelPaletteOptions<'a> {
-    pub coordinates: &'a [f64],
-    pub dimension: usize,
-    pub label_ids: &'a [usize],
-    pub label_count: usize,
-    pub fixed_colors: &'a [Option<Rgb8>],
-    pub constraints: CandidateConstraints,
-    pub background_filter: BackgroundFilter<'a>,
-    pub grid_size: GridSize,
-    pub anchors: PaletteAnchors<'a>,
-    pub weights: DistanceWeights,
-    pub colorblind_mode: ColorblindMode,
-    pub neighbors: usize,
-    pub max_points: Option<usize>,
+pub(crate) struct LabelPaletteOptions<'a> {
+    pub(crate) coordinates: &'a [f64],
+    pub(crate) dimension: usize,
+    pub(crate) label_ids: &'a [usize],
+    pub(crate) label_count: usize,
+    pub(crate) fixed_colors: &'a [Option<Rgb8>],
+    pub(crate) constraints: CandidateConstraints,
+    pub(crate) background_filter: BackgroundFilter<'a>,
+    pub(crate) grid_size: GridSize,
+    pub(crate) anchors: PaletteAnchors<'a>,
+    pub(crate) weights: DistanceWeights,
+    pub(crate) colorblind_mode: ColorblindMode,
+    pub(crate) neighbors: usize,
+    pub(crate) max_points: Option<usize>,
 }
 
-pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8>> {
-    validate_options(options)?;
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ValidatedLabelGeometry<'a> {
+    pub(super) coordinates: &'a [f64],
+    pub(super) dimension: usize,
+    pub(super) label_ids: &'a [usize],
+    pub(super) label_count: usize,
+    pub(super) neighbors: usize,
+    pub(super) max_points: usize,
+}
+
+pub(crate) fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8>> {
+    let geometry = validate_options(options)?;
 
     if options.label_count == 0 {
         return Ok(Vec::new());
@@ -50,8 +61,6 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
     options
         .background_filter
         .validate_user_colors("fixed_colors", &fixed_anchor_colors)?;
-    let graph = build_label_graph(options)?;
-
     if generated_count == 0 {
         return Ok(options
             .fixed_colors
@@ -60,7 +69,7 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
             .collect());
     }
 
-    options.weights.validate()?;
+    let graph = build_label_graph(geometry);
 
     let seed_anchor_colors: Vec<Rgb8> = options
         .anchors
@@ -94,7 +103,6 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
         .collect();
 
     Ok(assign_generated_palette(
-        options.label_count,
         options.fixed_colors,
         &graph,
         &palette_candidates,
@@ -103,14 +111,21 @@ pub fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<Vec<Rgb8
     ))
 }
 
-fn validate_options(options: LabelPaletteOptions<'_>) -> Result<()> {
+fn validate_options(options: LabelPaletteOptions<'_>) -> Result<ValidatedLabelGeometry<'_>> {
     if !(1..=3).contains(&options.dimension) {
         return Err(GlasbeyError::InvalidLabelPaletteInput {
             message: "dimension must be 1, 2, or 3",
         });
     }
 
-    if options.coordinates.len() != options.label_ids.len() * options.dimension {
+    let expected_coordinate_count = options
+        .label_ids
+        .len()
+        .checked_mul(options.dimension)
+        .ok_or(GlasbeyError::InvalidLabelPaletteInput {
+            message: "coordinates length is too large",
+        })?;
+    if options.coordinates.len() != expected_coordinate_count {
         return Err(GlasbeyError::InvalidLabelPaletteInput {
             message: "coordinates length must equal label_ids length times dimension",
         });
@@ -158,7 +173,14 @@ fn validate_options(options: LabelPaletteOptions<'_>) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(ValidatedLabelGeometry {
+        coordinates: options.coordinates,
+        dimension: options.dimension,
+        label_ids: options.label_ids,
+        label_count: options.label_count,
+        neighbors: options.neighbors,
+        max_points: options.max_points.unwrap_or(options.label_ids.len()),
+    })
 }
 
 #[cfg(test)]
@@ -267,7 +289,7 @@ mod tests {
     fn position_aware_assignment_beats_first_seen_palette_assignment() {
         let (coordinates, labels, fixed) = separated_label_fixture();
         let options = base_options(&coordinates, &labels, 4, &fixed);
-        let graph = build_label_graph(options).unwrap();
+        let graph = build_label_graph(validate_options(options).unwrap());
         let position_aware = select_label_palette(options).unwrap();
         let candidates =
             generate_candidates(GridSize::Step(255), CandidateConstraints::default(), 4).unwrap();
@@ -290,14 +312,20 @@ mod tests {
 
     fn graph_quality(graph: &LabelGraph, palette: &[Rgb8], weights: DistanceWeights) -> f32 {
         graph
-            .edges
+            .adjacency
             .iter()
-            .map(|edge| {
-                edge.weight
-                    * weights.oklab_distance_squared(
-                        palette[edge.left].to_oklab(),
-                        palette[edge.right].to_oklab(),
-                    )
+            .enumerate()
+            .flat_map(|(left, neighbors)| {
+                neighbors
+                    .iter()
+                    .filter(move |&&(right, _)| left < right)
+                    .map(move |&(right, weight)| {
+                        weight
+                            * weights.oklab_distance_squared(
+                                palette[left].to_oklab(),
+                                palette[right].to_oklab(),
+                            )
+                    })
             })
             .sum()
     }

@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
 from . import create_palette, extend_palette
+from ._format import Palette
 from ._types import BackgroundContrast, ColorblindMode, ColorFormat, ColorLike
 from .skill_installer import AgentName, install_skill
 
 _COLOR_FORMATS = ("hex", "rgb", "rgb01")
 _BACKGROUND_CONTRASTS = ("normal", "high", "wcag")
-_COLORBLIND_MODES = ("protan", "deutan", "tritan", "red-green", "all")
+_COLORBLIND_MODES = ("protan", "deutan", "tritan", "red-green", "daltonism", "all")
 _AGENTS = ("codex", "claude")
 
 
@@ -158,32 +159,17 @@ def _extend_command(args: argparse.Namespace) -> int:
     options = _palette_options(args)
     include_existing = not cast(bool, args.generated_only)
     existing_colors = cast(Sequence[ColorLike], args.colors)
-    kwargs: dict[str, object] = {
-        "format": options.format,
-        "avoid_colors": options.avoid_colors,
-        "background": options.background,
-        "background_contrast": options.background_contrast,
-        "colorblind_mode": options.colorblind_mode,
-    }
-    seed_colors = tuple(options.seed_colors)
-    if seed_colors:
-        existing_count = len(existing_colors)
-        target_size = args.target_size + len(seed_colors) if include_existing else args.target_size
-        colors = extend_palette(
-            [*existing_colors, *seed_colors],
-            target_size,
-            include_existing=include_existing,
-            **kwargs,
-        )
-        if include_existing:
-            colors = [*colors[:existing_count], *colors[existing_count + len(seed_colors) :]]
-    else:
-        colors = extend_palette(
-            existing_colors,
-            args.target_size,
-            include_existing=include_existing,
-            **kwargs,
-        )
+    colors = extend_palette(
+        existing_colors,
+        cast(int, args.target_size),
+        include_existing=include_existing,
+        seed_colors=options.seed_colors,
+        avoid_colors=options.avoid_colors,
+        background=options.background,
+        background_contrast=options.background_contrast,
+        colorblind_mode=options.colorblind_mode,
+        format=options.format,
+    )
     _write_palette(colors, options.format)
     return 0
 
@@ -200,7 +186,7 @@ def _install_skill_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _write_palette(colors: object, output_format: ColorFormat) -> None:
+def _write_palette(colors: Palette, output_format: ColorFormat) -> None:
     json.dump(
         {"colors": colors, "format": output_format},
         sys.stdout,

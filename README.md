@@ -53,6 +53,58 @@ from okpalette import extend_palette
 colors = extend_palette(["#0057b8", "#ffd700"], 8)
 ```
 
+## Rust API
+
+Rust crates can use the generator directly without depending on Python:
+
+```toml
+[dependencies]
+okpalette = "1.1"
+```
+
+The one-shot functions use the same defaults as the Python API and CLI:
+
+```rust
+use okpalette::{extend_palette, generate_palette, Rgb8};
+
+let colors = generate_palette(8).unwrap();
+let brand = [
+    "#0057b8".parse::<Rgb8>().unwrap(),
+    "#ffd700".parse().unwrap(),
+];
+let extended = extend_palette(&brand, 8).unwrap();
+```
+
+Use `PaletteGenerator` for reusable, typed configuration:
+
+```rust
+use okpalette::{
+    BackgroundContrast, CandidateConstraints, ChromaRange, ColorblindMode,
+    DistanceWeights, GridSize, LightnessRange, PaletteGenerator, Rgb8,
+};
+
+let generator = PaletteGenerator::new()
+    .grid_size(GridSize::Fine)
+    .constraints(
+        CandidateConstraints::new()
+            .with_lightness(LightnessRange::new(0.2, 0.9).unwrap())
+            .with_chroma(ChromaRange::new(Some(0.04), None).unwrap()),
+    )
+    .distance_weights(DistanceWeights::new(0.8, 1.2).unwrap())
+    .backgrounds(
+        [Rgb8::new(255, 255, 255)],
+        BackgroundContrast::Normal,
+    )
+    .colorblind_mode(ColorblindMode::All);
+
+let colors = generator.generate(12).unwrap();
+let new_colors = generator.generate_extension(&colors[..2], 10).unwrap();
+```
+
+`LabelPaletteRequest` exposes the position-aware label generator. Typed colors,
+constraints, parsing, and SVG/PNG rendering are also available from the crate
+root; candidate search and label-assignment internals remain private.
+
 Use position-aware label colors when nearby labels should be easier to tell apart:
 
 ```python
@@ -66,7 +118,7 @@ label_colors = create_label_palette(positions, labels)
 
 ## Example
 
-![Position Aware Example](examples/output/okpalette-word-scatter.png)
+![Position Aware Example](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png)
 
 ## Agent Skill
 
@@ -380,7 +432,18 @@ extend_palette(
     target_size,
     *,
     include_existing=True,
-    **create_palette_options,
+    seed_colors=(),
+    avoid_colors=None,
+    background=None,
+    background_contrast=None,
+    lightness=(0.20, 0.90),
+    chroma=(0.04, None),
+    hue=None,
+    grid_size="medium",
+    lightness_weight=1.0,
+    chroma_weight=1.0,
+    colorblind_mode=None,
+    format="hex",
 )
 ```
 

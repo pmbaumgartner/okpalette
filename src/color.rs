@@ -1,46 +1,75 @@
+use std::{fmt, str::FromStr};
+
 use crate::error::{GlasbeyError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// An 8-bit sRGB color.
 pub struct Rgb8 {
+    /// Red channel in `0..=255`.
     pub r: u8,
+    /// Green channel in `0..=255`.
     pub g: u8,
+    /// Blue channel in `0..=255`.
     pub b: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+/// A color in OKLab space.
 pub struct Oklab {
+    /// Perceptual lightness.
     pub l: f32,
+    /// Green-red opponent axis.
     pub a: f32,
+    /// Blue-yellow opponent axis.
     pub b: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+/// A color in cylindrical OKLCH space.
 pub struct Oklch {
+    /// Perceptual lightness.
     pub l: f32,
+    /// Chroma.
     pub c: f32,
+    /// Hue angle in degrees in `0.0..360.0`.
     pub h: f32,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+/// Color-vision-deficiency simulations included when comparing colors.
+///
+/// String parsing accepts `"protan"`, `"deutan"`, `"tritan"`,
+/// `"red-green"` (or `"daltonism"`), and `"all"`.
 pub enum ColorblindMode {
+    /// Compare ordinary sRGB colors only.
     #[default]
     None,
+    /// Include a protanopia simulation.
     Protan,
+    /// Include a deuteranopia simulation.
     Deutan,
+    /// Include a tritanopia simulation.
     Tritan,
+    /// Include both protanopia and deuteranopia simulations.
     RedGreen,
+    /// Include protanopia, deuteranopia, and tritanopia simulations.
     All,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ColorProfile {
-    pub normal: Oklab,
-    pub protan: Option<Oklab>,
-    pub deutan: Option<Oklab>,
-    pub tritan: Option<Oklab>,
+    components: [Oklab; 4],
+    len: u8,
 }
 
 impl Rgb8 {
+    /// Construct a color from red, green, and blue byte values.
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
+
+    /// Convert this sRGB color to OKLab.
     pub fn to_oklab(self) -> Oklab {
         let r = srgb_channel_to_linear(self.r);
         let g = srgb_channel_to_linear(self.g);
@@ -49,28 +78,57 @@ impl Rgb8 {
         linear_rgb_to_oklab(r, g, b)
     }
 
+    /// Format this color as a lowercase `#rrggbb` string.
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
 
-impl ColorblindMode {
-    pub fn parse(value: Option<&str>) -> Result<Self> {
+impl From<[u8; 3]> for Rgb8 {
+    fn from([r, g, b]: [u8; 3]) -> Self {
+        Self::new(r, g, b)
+    }
+}
+
+impl From<(u8, u8, u8)> for Rgb8 {
+    fn from((r, g, b): (u8, u8, u8)) -> Self {
+        Self::new(r, g, b)
+    }
+}
+
+impl FromStr for Rgb8 {
+    type Err = GlasbeyError;
+
+    fn from_str(value: &str) -> Result<Self> {
+        crate::parse::parse_hex_color(value)
+    }
+}
+
+impl fmt::Display for Rgb8 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
+}
+
+impl FromStr for ColorblindMode {
+    type Err = GlasbeyError;
+
+    fn from_str(value: &str) -> Result<Self> {
         match value {
-            None => Ok(Self::None),
-            Some("protan") => Ok(Self::Protan),
-            Some("deutan") => Ok(Self::Deutan),
-            Some("tritan") => Ok(Self::Tritan),
-            Some("red-green" | "daltonism") => Ok(Self::RedGreen),
-            Some("all") => Ok(Self::All),
-            Some(_) => Err(GlasbeyError::InvalidConstraintRange {
+            "protan" => Ok(Self::Protan),
+            "deutan" => Ok(Self::Deutan),
+            "tritan" => Ok(Self::Tritan),
+            "red-green" | "daltonism" => Ok(Self::RedGreen),
+            "all" => Ok(Self::All),
+            _ => Err(GlasbeyError::InvalidConstraintRange {
                 constraint: "colorblind_mode",
-                message:
-                    "must be None, 'protan', 'deutan', 'tritan', 'red-green', 'daltonism', or 'all'",
+                message: "must be 'protan', 'deutan', 'tritan', 'red-green', 'daltonism', or 'all'",
             }),
         }
     }
+}
 
+impl ColorblindMode {
     pub(crate) fn includes_protan(self) -> bool {
         matches!(self, Self::Protan | Self::RedGreen | Self::All)
     }
@@ -94,30 +152,46 @@ impl ColorProfile {
         normal: Oklab,
         colorblind_mode: ColorblindMode,
     ) -> Self {
-        Self {
-            normal,
-            protan: colorblind_mode
-                .includes_protan()
-                .then(|| simulate_machado_oklab(rgb, PROTAN_MATRIX)),
-            deutan: colorblind_mode
-                .includes_deutan()
-                .then(|| simulate_machado_oklab(rgb, DEUTAN_MATRIX)),
-            tritan: colorblind_mode
-                .includes_tritan()
-                .then(|| simulate_machado_oklab(rgb, TRITAN_MATRIX)),
+        let mut components = [normal; 4];
+        let mut len = 1;
+
+        for matrix in [
+            colorblind_mode.includes_protan().then_some(PROTAN_MATRIX),
+            colorblind_mode.includes_deutan().then_some(DEUTAN_MATRIX),
+            colorblind_mode.includes_tritan().then_some(TRITAN_MATRIX),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            components[len] = simulate_machado_oklab(rgb, matrix);
+            len += 1;
         }
+
+        Self {
+            components,
+            len: len as u8,
+        }
+    }
+
+    pub(crate) fn components(&self) -> &[Oklab] {
+        &self.components[..usize::from(self.len)]
     }
 }
 
-pub fn relative_luminance_srgb(rgb: Rgb8) -> f64 {
+pub(crate) fn relative_luminance_srgb(rgb: Rgb8) -> f64 {
     0.2126 * srgb_channel_to_linear_f64(rgb.r)
         + 0.7152 * srgb_channel_to_linear_f64(rgb.g)
         + 0.0722 * srgb_channel_to_linear_f64(rgb.b)
 }
 
-pub fn wcag_contrast_ratio(left: Rgb8, right: Rgb8) -> f64 {
-    let left_luminance = relative_luminance_srgb(left);
-    let right_luminance = relative_luminance_srgb(right);
+pub(crate) fn wcag_contrast_ratio(left: Rgb8, right: Rgb8) -> f64 {
+    wcag_contrast_ratio_from_luminance(
+        relative_luminance_srgb(left),
+        relative_luminance_srgb(right),
+    )
+}
+
+pub(crate) fn wcag_contrast_ratio_from_luminance(left_luminance: f64, right_luminance: f64) -> f64 {
     let light = left_luminance.max(right_luminance);
     let dark = left_luminance.min(right_luminance);
 
@@ -125,6 +199,7 @@ pub fn wcag_contrast_ratio(left: Rgb8, right: Rgb8) -> f64 {
 }
 
 impl Oklab {
+    /// Convert this color to cylindrical OKLCH.
     pub fn to_oklch(self) -> Oklch {
         Oklch {
             l: self.l,
@@ -294,30 +369,14 @@ mod tests {
 
     #[test]
     fn parses_colorblind_modes() {
-        assert_eq!(ColorblindMode::parse(None), Ok(ColorblindMode::None));
-        assert_eq!(
-            ColorblindMode::parse(Some("protan")),
-            Ok(ColorblindMode::Protan)
-        );
-        assert_eq!(
-            ColorblindMode::parse(Some("deutan")),
-            Ok(ColorblindMode::Deutan)
-        );
-        assert_eq!(
-            ColorblindMode::parse(Some("tritan")),
-            Ok(ColorblindMode::Tritan)
-        );
-        assert_eq!(
-            ColorblindMode::parse(Some("red-green")),
-            Ok(ColorblindMode::RedGreen)
-        );
-        assert_eq!(
-            ColorblindMode::parse(Some("daltonism")),
-            Ok(ColorblindMode::RedGreen)
-        );
-        assert_eq!(ColorblindMode::parse(Some("all")), Ok(ColorblindMode::All));
+        assert_eq!("protan".parse(), Ok(ColorblindMode::Protan));
+        assert_eq!("deutan".parse(), Ok(ColorblindMode::Deutan));
+        assert_eq!("tritan".parse(), Ok(ColorblindMode::Tritan));
+        assert_eq!("red-green".parse(), Ok(ColorblindMode::RedGreen));
+        assert_eq!("daltonism".parse(), Ok(ColorblindMode::RedGreen));
+        assert_eq!("all".parse(), Ok(ColorblindMode::All));
         assert!(matches!(
-            ColorblindMode::parse(Some("protanopia")),
+            "protanopia".parse::<ColorblindMode>(),
             Err(GlasbeyError::InvalidConstraintRange {
                 constraint: "colorblind_mode",
                 ..
@@ -344,24 +403,16 @@ mod tests {
     #[test]
     fn color_profile_precomputes_only_selected_simulations() {
         let normal = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::None);
-        assert_oklab_approx(normal.normal, rgb(255, 0, 0).to_oklab());
-        assert_eq!(normal.protan, None);
-        assert_eq!(normal.deutan, None);
-        assert_eq!(normal.tritan, None);
+        assert_oklab_approx(normal.components()[0], rgb(255, 0, 0).to_oklab());
+        assert_eq!(normal.components().len(), 1);
 
         let protan = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::Protan);
-        assert!(protan.protan.is_some());
-        assert_eq!(protan.deutan, None);
-        assert_eq!(protan.tritan, None);
+        assert_eq!(protan.components().len(), 2);
 
         let red_green = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::RedGreen);
-        assert!(red_green.protan.is_some());
-        assert!(red_green.deutan.is_some());
-        assert_eq!(red_green.tritan, None);
+        assert_eq!(red_green.components().len(), 3);
 
         let all = ColorProfile::from_rgb(rgb(255, 0, 0), ColorblindMode::All);
-        assert!(all.protan.is_some());
-        assert!(all.deutan.is_some());
-        assert!(all.tritan.is_some());
+        assert_eq!(all.components().len(), 4);
     }
 }

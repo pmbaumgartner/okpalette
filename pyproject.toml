@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "okpalette"
-version = "1.0.0"
-description = "Fast, dependency-free OKLab categorical color palettes powered by Rust"
+version = "1.1.0"
+description = "Fast, deterministic OKLab categorical color palettes powered by Rust"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -41,6 +41,14 @@ dev = [
 python-source = "python"
 module-name = "okpalette._core"
 bindings = "pyo3"
+features = ["python"]
+include = [
+  { path = "pyproject.toml", format = "sdist" },
+  { path = "python/**/*.py", format = "sdist" },
+  { path = "python/**/*.pyi", format = "sdist" },
+  { path = "python/**/py.typed", format = "sdist" },
+  { path = "python/**/*.md", format = "sdist" },
+]
 
 [tool.ruff]
 line-length = 100

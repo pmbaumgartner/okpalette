@@ -1,14 +1,15 @@
+use super::ValidatedLabelGeometry;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct SamplePoint {
     pub(super) original_index: usize,
     pub(super) label_id: usize,
 }
 
-pub(super) fn deterministic_sample(
-    label_ids: &[usize],
-    label_count: usize,
-    max_points: usize,
-) -> Vec<SamplePoint> {
+pub(super) fn deterministic_sample(geometry: ValidatedLabelGeometry<'_>) -> Vec<SamplePoint> {
+    let label_ids = geometry.label_ids;
+    let label_count = geometry.label_count;
+    let max_points = geometry.max_points;
     if label_ids.len() <= max_points {
         return label_ids
             .iter()
@@ -116,7 +117,14 @@ mod tests {
     #[test]
     fn deterministic_sample_keeps_rare_labels_represented() {
         let labels = [0, 0, 0, 0, 1, 2, 2, 2];
-        let sample = deterministic_sample(&labels, 3, 4);
+        let sample = deterministic_sample(ValidatedLabelGeometry {
+            coordinates: &[],
+            dimension: 1,
+            label_ids: &labels,
+            label_count: 3,
+            neighbors: 1,
+            max_points: 4,
+        });
         let sampled_labels: Vec<usize> = sample.iter().map(|point| point.label_id).collect();
 
         assert_eq!(sample.len(), 4);

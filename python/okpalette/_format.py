@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, List, Optional, Sequence, Tuple, Union, cast
+from importlib import import_module
+from typing import List, Optional, Protocol, Sequence, Tuple, Union, cast
 
 from ._types import (
-    BackgroundContrast,
     BackgroundLike,
-    ColorblindMode,
     ColorFormat,
     ColorLike,
     GridSize,
@@ -19,11 +18,47 @@ from ._types import (
 
 Palette = Union[List[str], List[Rgb8], List[Rgb01]]
 
+
+class PaletteGeneratorBridge(Protocol):
+    def set_seed_colors(self, colors: List[str]) -> None: ...
+
+    def set_avoid_colors(self, colors: List[str]) -> None: ...
+
+    def set_backgrounds(
+        self,
+        colors: Optional[List[str]],
+        contrast: Optional[str],
+    ) -> None: ...
+
+    def set_constraints(
+        self,
+        lightness: Optional[Tuple[float, float]],
+        chroma: Optional[Tuple[Optional[float], Optional[float]]],
+        hue: Optional[Tuple[float, float]],
+    ) -> None: ...
+
+    def set_grid_step(self, grid_step: int) -> None: ...
+
+    def set_distance_weights(self, lightness: float, chroma: float) -> None: ...
+
+    def set_colorblind_mode(self, mode: Optional[str]) -> None: ...
+
+    def generate(self, palette_size: int) -> List[str]: ...
+
+    def generate_for_labels(
+        self,
+        coordinates: List[float],
+        dimension: int,
+        label_ids: List[int],
+        label_count: int,
+        fixed_colors: List[Optional[str]],
+        neighbors: int,
+        max_points: Optional[int],
+    ) -> List[str]: ...
+
 _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
 _FORMATS = {"hex", "rgb", "rgb01"}
-_BACKGROUND_CONTRASTS = {"normal", "high", "wcag"}
-_COLORBLIND_MODES = {"protan", "deutan", "tritan", "red-green", "daltonism", "all"}
 
 
 def normalize_color(color: ColorLike) -> str:
@@ -88,9 +123,7 @@ def resolve_grid_step(grid_size: GridSize) -> int:
             ) from error
 
     if type(grid_size) is int:
-        if 1 <= grid_size <= 255:
-            return grid_size
-        raise ValueError("grid_size must be an integer in 1..255")
+        return grid_size
 
     raise ValueError("grid_size must be 'coarse', 'medium', 'fine', or an integer in 1..255")
 
@@ -112,69 +145,38 @@ def validate_format(output_format: object) -> ColorFormat:
     return cast(ColorFormat, output_format)
 
 
-def validate_background_contrast(value: object) -> Optional[BackgroundContrast]:
-    if value is None:
-        return None
-
-    if value not in _BACKGROUND_CONTRASTS:
-        raise ValueError("background_contrast must be None, 'normal', 'high', or 'wcag'")
-
-    return cast(BackgroundContrast, value)
-
-
-def validate_colorblind_mode(value: object) -> Optional[ColorblindMode]:
-    if value is None:
-        return None
-
-    if value not in _COLORBLIND_MODES:
-        raise ValueError(
-            "colorblind_mode must be None, 'protan', 'deutan', 'tritan', "
-            "'red-green', 'daltonism', or 'all'"
-        )
-
-    return cast(ColorblindMode, value)
-
-
-def validate_lightness(value: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
-    return _validate_float_pair(value, "lightness", minimum=0.0, maximum=1.0, ordered=True)
-
-
-def validate_chroma(
-    value: Optional[Tuple[Optional[float], Optional[float]]],
-) -> Optional[Tuple[Optional[float], Optional[float]]]:
+def coerce_float_pair(
+    value: Optional[Tuple[float, float]],
+    name: str,
+) -> Optional[Tuple[float, float]]:
     if value is None:
         return None
 
     if not isinstance(value, tuple) or len(value) != 2:
+        raise ValueError(f"{name} must be a tuple of two floats or None")
+
+    return (
+        coerce_float(value[0], f"{name} minimum"),
+        coerce_float(value[1], f"{name} maximum"),
+    )
+
+def coerce_chroma_pair(
+    value: Optional[Tuple[Optional[float], Optional[float]]],
+) -> Optional[Tuple[Optional[float], Optional[float]]]:
+    if value is None:
+        return None
+    if not isinstance(value, tuple) or len(value) != 2:
         raise ValueError("chroma must be a tuple of two bounds or None")
-
-    minimum = None if value[0] is None else _as_float(value[0], "chroma minimum")
-    maximum = None if value[1] is None else _as_float(value[1], "chroma maximum")
-
-    if minimum is not None and minimum < 0.0:
-        raise ValueError("chroma minimum must be greater than or equal to 0")
-    if maximum is not None and maximum < 0.0:
-        raise ValueError("chroma maximum must be greater than or equal to 0")
-    if minimum is not None and maximum is not None and minimum > maximum:
-        raise ValueError("chroma minimum must be less than or equal to maximum")
-
-    return (minimum, maximum)
+    return (
+        None if value[0] is None else coerce_float(value[0], "chroma minimum"),
+        None if value[1] is None else coerce_float(value[1], "chroma maximum"),
+    )
 
 
-def validate_hue(value: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
-    return _validate_float_pair(value, "hue", minimum=0.0, maximum=360.0, ordered=False)
-
-
-def validate_weights(lightness_weight: float, chroma_weight: float) -> Tuple[float, float]:
-    lightness = _as_float(lightness_weight, "lightness_weight")
-    chroma = _as_float(chroma_weight, "chroma_weight")
-
-    if lightness < 0.0 or chroma < 0.0:
-        raise ValueError("distance weights must be greater than or equal to 0")
-    if lightness == 0.0 and chroma == 0.0:
-        raise ValueError("at least one distance weight must be positive")
-
-    return (lightness, chroma)
+def coerce_float(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a number")
+    return float(value)
 
 
 def convert_hex_palette(colors: Sequence[str], output_format: ColorFormat) -> Palette:
@@ -188,28 +190,16 @@ def convert_hex_palette(colors: Sequence[str], output_format: ColorFormat) -> Pa
     return [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in rgb_colors]
 
 
-def load_generate_palette_rs() -> Any:
+def load_palette_generator_rs() -> type[PaletteGeneratorBridge]:
     try:
-        from ._core import generate_palette_rs
+        core = import_module("okpalette._core")
     except ImportError as error:
         raise ImportError(
             "okpalette native extension is unavailable; install the okpalette wheel "
             "or run `maturin develop` in the source checkout."
         ) from error
 
-    return generate_palette_rs
-
-
-def load_generate_label_palette_rs() -> Any:
-    try:
-        from ._core import generate_label_palette_rs
-    except ImportError as error:
-        raise ImportError(
-            "okpalette native extension is unavailable; install the okpalette wheel "
-            "or run `maturin develop` in the source checkout."
-        ) from error
-
-    return generate_label_palette_rs
+    return cast(type[PaletteGeneratorBridge], getattr(core, "_PaletteGenerator"))
 
 
 def _normalize_hex_color(color: str) -> str:
@@ -260,42 +250,6 @@ def _is_rgb_tuple_like(value: object) -> bool:
             or all(type(component) is float for component in value)
         )
     )
-
-
-def _validate_float_pair(
-    value: Optional[Tuple[float, float]],
-    name: str,
-    *,
-    minimum: float,
-    maximum: float,
-    ordered: bool,
-) -> Optional[Tuple[float, float]]:
-    if value is None:
-        return None
-
-    if not isinstance(value, tuple) or len(value) != 2:
-        raise ValueError(f"{name} must be a tuple of two floats or None")
-
-    lower = _as_float(value[0], f"{name} minimum")
-    upper = _as_float(value[1], f"{name} maximum")
-
-    if lower < minimum or upper < minimum or lower > maximum or upper > maximum:
-        raise ValueError(f"{name} bounds must be in {minimum:g}..{maximum:g}")
-    if ordered and lower > upper:
-        raise ValueError(f"{name} minimum must be less than or equal to maximum")
-
-    return (lower, upper)
-
-
-def _as_float(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be a finite number")
-
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"{name} must be a finite number")
-
-    return result
 
 
 def _hex_to_rgb(color: str) -> Rgb8:

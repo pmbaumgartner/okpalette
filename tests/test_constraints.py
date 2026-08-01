@@ -45,6 +45,7 @@ def test_lightness_rejects_invalid_bounds(lightness: object) -> None:
         (None, -0.1),
         (0.3, 0.1),
         (math.nan, None),
+        (None, None),
         (0.1,),
         [0.1, None],
     ],

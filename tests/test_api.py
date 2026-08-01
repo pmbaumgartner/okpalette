@@ -90,6 +90,19 @@ def test_extend_palette_can_return_only_generated_colors() -> None:
     assert "#00ff00" not in palette
 
 
+def test_extend_palette_accepts_extra_seed_colors_without_returning_them() -> None:
+    palette = extend_palette(
+        ["#ff0000"],
+        3,
+        seed_colors=["#00ff00"],
+        grid_size="coarse",
+    )
+
+    assert len(palette) == 3
+    assert palette[0] == "#ff0000"
+    assert "#00ff00" not in palette
+
+
 def test_default_background_is_unconstrained_when_white_is_on_grid() -> None:
     palette = create_palette(7, grid_size=255, lightness=None, chroma=None)
 
@@ -108,6 +121,6 @@ def test_native_extension_missing_error_is_actionable(monkeypatch: pytest.Monkey
     monkeypatch.setitem(sys.modules, "okpalette._core", None)
 
     with pytest.raises(ImportError, match="native extension is unavailable") as error:
-        _format.load_generate_palette_rs()
+        _format.load_palette_generator_rs()
 
     assert isinstance(error.value.__cause__, ImportError)

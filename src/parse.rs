@@ -1,6 +1,7 @@
 use crate::color::Rgb8;
 use crate::error::{GlasbeyError, Result};
 
+/// Parse `RGB`, `#RGB`, `RRGGBB`, or `#RRGGBB` ASCII hexadecimal notation.
 pub fn parse_hex_color(input: &str) -> Result<Rgb8> {
     let hex = input.strip_prefix('#').unwrap_or(input);
 

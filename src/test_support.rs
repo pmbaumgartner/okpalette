@@ -26,6 +26,7 @@ pub(crate) fn assert_png_dimensions(bytes: &[u8], width: u32, height: u32) {
     );
 }
 
+#[cfg(feature = "python")]
 pub(crate) fn assert_canonical_hex_palette(colors: &[String], size: usize) {
     assert_eq!(colors.len(), size);
     assert!(colors.iter().all(|color| {

@@ -62,6 +62,14 @@ def test_create_accepts_common_palette_options(capsys: pytest.CaptureFixture[str
     assert len(payload["colors"]) == 3
 
 
+def test_create_accepts_daltonism_alias(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = _cli.main(["create", "2", "--colorblind-mode", "daltonism"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+
+
 def test_extend_outputs_json_and_preserves_existing_colors(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

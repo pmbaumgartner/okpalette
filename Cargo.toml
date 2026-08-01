@@ -1,21 +1,42 @@
 [package]
 name = "okpalette"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
+# kiddo 5.3.1 uses const floating-point methods stabilized in Rust 1.90.
+rust-version = "1.90"
 license = "MIT"
-description = "Fast, dependency-free OKLab categorical color palettes powered by Rust"
+description = "Fast, deterministic OKLab categorical color palettes powered by Rust"
 readme = "README.md"
 repository = "https://github.com/pmbaumgartner/okpalette"
 homepage = "https://github.com/pmbaumgartner/okpalette"
+documentation = "https://docs.rs/okpalette"
+keywords = ["color", "palette", "glasbey", "categorical", "oklab"]
+categories = ["algorithms", "graphics", "visualization"]
+publish = ["crates-io"]
+exclude = [
+    ".github/**",
+    ".gitignore",
+    "AGENTS.md",
+    "docs/**",
+    "examples/**",
+    "pyproject.toml",
+    "python/**",
+    "tests/*.py",
+    "uv.lock",
+]
 
 [lib]
-name = "_core"
+name = "okpalette"
 crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+python = ["dep:pyo3"]
 
 [dependencies]
 # Use abi3-py312 so one wheel can support Python 3.12+ where PyO3 APIs allow it.
 kiddo = { version = "5.3.1", default-features = false }
-pyo3 = { version = "0.28.3", features = ["abi3-py312"] }
+pyo3 = { version = "0.28.3", features = ["abi3-py312"], optional = true }
 png = "0.18"
 rayon = "1.12"
 thiserror = "2.0"
