@@ -55,10 +55,14 @@ def test_rgb_tuples_are_normalized(color: object, expected: str) -> None:
     assert extend_palette([cast(Any, color)], 1) == [expected]
 
 
-@pytest.mark.parametrize("color", [(0, 0, 0), (1, 0, 0), (1, 1, 1)])
-def test_ambiguous_integer_rgb_tuples_are_rejected(color: tuple[int, int, int]) -> None:
-    with pytest.raises(ValueError, match="ambiguous integer RGB tuple"):
-        extend_palette([cast(Any, color)], 1)
+@pytest.mark.parametrize(
+    ("color", "expected"),
+    [((0, 0, 0), "#000000"), ((1, 0, 0), "#010000"), ((1, 1, 1), "#010101")],
+)
+def test_integer_rgb_tuples_use_rgb8_semantics(
+    color: tuple[int, int, int], expected: str
+) -> None:
+    assert extend_palette([color], 1) == [expected]
 
 
 @pytest.mark.parametrize(

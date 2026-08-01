@@ -204,7 +204,7 @@ mod tests {
             fixed_colors,
             constraints: CandidateConstraints::default(),
             background_filter: BackgroundFilter::default(),
-            grid_size: GridSize::Step(255),
+            grid_size: GridSize::try_step(255).unwrap(),
             anchors: PaletteAnchors::default(),
             weights: DistanceWeights::default(),
             colorblind_mode: ColorblindMode::None,
@@ -269,8 +269,12 @@ mod tests {
         let (coordinates, labels, fixed) = separated_label_fixture();
         let options = base_options(&coordinates, &labels, 4, &fixed);
         let label_palette = select_label_palette(options).unwrap();
-        let candidates =
-            generate_candidates(GridSize::Step(255), CandidateConstraints::default(), 4).unwrap();
+        let candidates = generate_candidates(
+            GridSize::try_step(255).unwrap(),
+            CandidateConstraints::default(),
+            4,
+        )
+        .unwrap();
         let regular_palette = select_palette(
             &candidates,
             PaletteOptions {
@@ -291,8 +295,12 @@ mod tests {
         let options = base_options(&coordinates, &labels, 4, &fixed);
         let graph = build_label_graph(validate_options(options).unwrap());
         let position_aware = select_label_palette(options).unwrap();
-        let candidates =
-            generate_candidates(GridSize::Step(255), CandidateConstraints::default(), 4).unwrap();
+        let candidates = generate_candidates(
+            GridSize::try_step(255).unwrap(),
+            CandidateConstraints::default(),
+            4,
+        )
+        .unwrap();
         let first_seen = select_palette(
             &candidates,
             PaletteOptions {

@@ -196,7 +196,7 @@ mod tests {
             fixed_colors,
             constraints: CandidateConstraints::default(),
             background_filter: BackgroundFilter::default(),
-            grid_size: GridSize::Step(255),
+            grid_size: GridSize::try_step(255).unwrap(),
             anchors: PaletteAnchors::default(),
             weights: DistanceWeights::default(),
             colorblind_mode: ColorblindMode::None,

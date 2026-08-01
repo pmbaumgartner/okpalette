@@ -11,8 +11,9 @@
 //!
 //! let palette = PaletteGenerator::new()
 //!     .backgrounds([Rgb8::new(255, 255, 255)], BackgroundContrast::Normal)
+//!     ?
 //!     .generate(8)?;
-//! # Ok::<(), okpalette::GlasbeyError>(())
+//! # Ok::<(), okpalette::OkPaletteError>(())
 //! ```
 
 mod algorithm;
@@ -35,6 +36,6 @@ pub use api::{
 pub use candidates::{CandidateConstraints, ChromaRange, GridSize, HueRange, LightnessRange};
 pub use color::{ColorblindMode, Oklab, Oklch, Rgb8};
 pub use distance::DistanceWeights;
-pub use error::{GlasbeyError, Result};
+pub use error::{GlasbeyError, OkPaletteError, Result};
 pub use parse::parse_hex_color;
 pub use render::{render_palette_png, render_palette_svg};

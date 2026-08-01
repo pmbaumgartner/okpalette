@@ -84,14 +84,20 @@ impl PaletteGenerator {
     }
 
     /// Keep generated colors distinct from every supplied background color.
-    #[must_use]
     pub fn backgrounds(
         mut self,
         colors: impl Into<Vec<Rgb8>>,
         contrast: BackgroundContrast,
-    ) -> Self {
-        self.background = Some((colors.into(), contrast));
-        self
+    ) -> Result<Self> {
+        let colors = colors.into();
+        if colors.is_empty() {
+            return Err(GlasbeyError::InvalidConstraintRange {
+                constraint: "background",
+                message: "must contain at least one color",
+            });
+        }
+        self.background = Some((colors, contrast));
+        Ok(self)
     }
 
     /// Replace all candidate color constraints.
@@ -233,13 +239,6 @@ impl PaletteGenerator {
         let Some((backgrounds, contrast)) = &self.background else {
             return Ok(BackgroundFilter::None);
         };
-        if backgrounds.is_empty() {
-            return Err(GlasbeyError::InvalidConstraintRange {
-                constraint: "background",
-                message: "must contain at least one color",
-            });
-        }
-
         Ok(match contrast {
             BackgroundContrast::Normal => BackgroundFilter::NormalOklabDistance {
                 backgrounds,

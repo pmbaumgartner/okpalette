@@ -24,7 +24,7 @@ def test_matplotlib_accepts_hex_palette_as_cycle_and_colormap() -> None:
     from cycler import cycler
     from matplotlib.colors import ListedColormap
 
-    colors = cast(list[str], create_palette(4, grid_size="coarse"))
+    colors = create_palette(4, grid_size="coarse")
 
     color_cycle = cycler(color=colors)
     colormap = ListedColormap(colors, name="okpalette")
@@ -35,7 +35,7 @@ def test_matplotlib_accepts_hex_palette_as_cycle_and_colormap() -> None:
 
 def test_altair_and_plotly_examples_use_plain_hex_sequences_and_maps() -> None:
     categories = ["control", "treated", "outlier"]
-    colors = cast(list[str], create_palette(len(categories), grid_size="coarse"))
+    colors = create_palette(len(categories), grid_size="coarse")
 
     altair_domain = categories
     altair_range = colors

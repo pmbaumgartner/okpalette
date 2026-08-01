@@ -3,7 +3,7 @@ use thiserror::Error;
 /// Errors returned while validating inputs, generating palettes, or rendering previews.
 #[non_exhaustive]
 #[derive(Debug, Error, PartialEq)]
-pub enum GlasbeyError {
+pub enum OkPaletteError {
     /// A hexadecimal color had neither three nor six digits.
     #[error(
         "invalid hex color length {length}; expected 3 or 6 hex digits with optional leading '#'"
@@ -93,4 +93,9 @@ pub enum GlasbeyError {
 }
 
 /// Result type returned by `okpalette` operations.
-pub type Result<T> = std::result::Result<T, GlasbeyError>;
+pub type Result<T> = std::result::Result<T, OkPaletteError>;
+
+/// Backward-compatible name for [`OkPaletteError`].
+///
+/// New code should use [`OkPaletteError`], which matches the crate name.
+pub type GlasbeyError = OkPaletteError;

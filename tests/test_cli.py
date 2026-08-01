@@ -91,7 +91,7 @@ def test_extend_generated_only_omits_existing_colors(capsys: pytest.CaptureFixtu
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert exit_code == 0
-    assert len(payload["colors"]) == 4
+    assert len(payload["colors"]) == 2
     assert "#ff0000" not in payload["colors"]
     assert "#00ff00" not in payload["colors"]
 

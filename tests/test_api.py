@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from importlib import import_module
-from typing import Any, cast
+from typing import Any, assert_type, cast
 
 import pytest
 
@@ -48,6 +48,12 @@ def test_public_imports_and_exports() -> None:
     }
 
 
+def test_literal_formats_have_precise_return_types() -> None:
+    assert_type(create_palette(1), list[str])
+    assert_type(create_palette(1, format="rgb"), list[tuple[int, int, int]])
+    assert_type(create_palette(1, format="rgb01"), list[tuple[float, float, float]])
+
+
 @pytest.mark.parametrize("palette_size", [1, 2, 10])
 def test_create_palette_returns_requested_size(palette_size: int) -> None:
     palette = create_palette(palette_size, grid_size="coarse")
@@ -55,12 +61,17 @@ def test_create_palette_returns_requested_size(palette_size: int) -> None:
     assert len(palette) == palette_size
 
 
+def test_zero_sized_palette_is_empty() -> None:
+    assert create_palette(0) == []
+    assert extend_palette([], 0) == []
+
+
 @pytest.mark.parametrize(
     "call",
     [
-        lambda: create_palette(0),
+        lambda: create_palette(-1),
         lambda: create_palette(cast(Any, True)),
-        lambda: extend_palette([], 0),
+        lambda: extend_palette([], -1),
         lambda: extend_palette(["#ff0000", "#00ff00"], 1, include_existing=True),
     ],
 )
@@ -85,9 +96,13 @@ def test_extend_palette_can_return_only_generated_colors() -> None:
         grid_size="coarse",
     )
 
-    assert len(palette) == 3
+    assert len(palette) == 1
     assert "#ff0000" not in palette
     assert "#00ff00" not in palette
+
+
+def test_rgb8_black_and_near_black_are_accepted() -> None:
+    assert extend_palette([(0, 0, 0), (1, 1, 1)], 2) == ["#000000", "#010101"]
 
 
 def test_extend_palette_accepts_extra_seed_colors_without_returning_them() -> None:

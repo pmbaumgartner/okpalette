@@ -166,25 +166,19 @@ def test_palette_cvd_simulation_grid_is_written() -> None:
     _require_plot_smoke()
 
     palettes = [
-        ("default", cast(list[str], create_palette(24))),
+        ("default", create_palette(24)),
         (
             "wcag white",
-            cast(
-                list[str],
-                create_palette(24, background="#ffffff", background_contrast="wcag"),
-            ),
+            create_palette(24, background="#ffffff", background_contrast="wcag"),
         ),
-        ("cvd all", cast(list[str], create_palette(24, colorblind_mode="all"))),
+        ("cvd all", create_palette(24, colorblind_mode="all")),
         (
             "wcag white + cvd all",
-            cast(
-                list[str],
-                create_palette(
-                    24,
-                    background="#ffffff",
-                    background_contrast="wcag",
-                    colorblind_mode="all",
-                ),
+            create_palette(
+                24,
+                background="#ffffff",
+                background_contrast="wcag",
+                colorblind_mode="all",
             ),
         ),
     ]

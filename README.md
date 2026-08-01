@@ -24,7 +24,7 @@ Create stable colors for categories:
 from okpalette import create_palette
 
 colors = create_palette(8)
-# ["#080050", "#e00800", "#1078ff", ...]
+# ["#000058", "#90ff00", "#ff38ff", ...]
 ```
 
 Get the same kind of palette from a shell:
@@ -42,7 +42,7 @@ uvx okpalette create 8
 CLI success output is JSON only:
 
 ```json
-{"colors":["#080050","#e00800","#1078ff"],"format":"hex"}
+{"colors":["#000058","#90ff00","#ff38ff"],"format":"hex"}
 ```
 
 Extend colors you already have:
@@ -95,6 +95,7 @@ let generator = PaletteGenerator::new()
         [Rgb8::new(255, 255, 255)],
         BackgroundContrast::Normal,
     )
+    .unwrap()
     .colorblind_mode(ColorblindMode::All);
 
 let colors = generator.generate(12).unwrap();
@@ -167,6 +168,9 @@ Use existing colors as anchors without returning them:
 new_colors = extend_palette(brand, 10, include_existing=False)
 ```
 
+Here `target_size=10` still describes the final palette size, so `new_colors`
+contains eight generated colors when `brand` contains two colors.
+
 The same basic workflows are available through the CLI:
 
 ```bash
@@ -193,7 +197,7 @@ positions = [(0.0, 0.0), (0.2, 0.0), (5.0, 0.0), (5.2, 0.0)]
 labels = ["control", "treated", "control", "outlier"]
 
 colors = create_label_palette(positions, labels)
-# {"control": "#080050", "treated": "#e00800", "outlier": ...}
+# {"control": "#90ff00", "treated": "#000058", "outlier": "#ff38ff"}
 ```
 
 Labels may be strings, integers, tuples, or other hashable Python objects. The

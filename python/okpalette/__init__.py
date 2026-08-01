@@ -18,6 +18,7 @@ from ._format import (
     normalize_color_sequence,
     resolve_grid_step,
     validate_format,
+    validate_nonnegative_size,
     validate_positive_size,
 )
 from ._label import (
@@ -82,9 +83,9 @@ def create_palette(
     colorblind_mode: Optional[ColorblindMode] = None,
     format: ColorFormat = "hex",
 ) -> Palette:
-    """Create a deterministic categorical palette."""
+    """Create a deterministic categorical palette; zero returns an empty palette."""
 
-    size = validate_positive_size("palette_size", palette_size)
+    size = validate_nonnegative_size("palette_size", palette_size)
     output_format = validate_format(format)
     palette = _generate_palette_hex(
         size,
@@ -123,13 +124,13 @@ def extend_palette(
     colorblind_mode: Optional[ColorblindMode] = None,
     format: ColorFormat = "hex",
 ) -> Palette:
-    """Extend an existing palette to a target size."""
+    """Extend to a final target size, optionally returning only the generated portion."""
 
     if type(include_existing) is not bool:
         raise ValueError("include_existing must be a boolean")
 
     existing = normalize_color_sequence(colors, "colors")
-    target = validate_positive_size("target_size", target_size)
+    target = validate_nonnegative_size("target_size", target_size)
     output_format = validate_format(format)
     palette_options = _PaletteOptions(
         seed_colors=seed_colors,
@@ -149,7 +150,12 @@ def extend_palette(
     if include_existing:
         palette = generator.extend(existing, target)
     else:
-        palette = generator.generate_extension(existing, target)
+        generated_count = target - len(existing)
+        if generated_count < 0:
+            raise ValueError(
+                "target_size must be greater than or equal to the existing palette length"
+            )
+        palette = generator.generate_extension(existing, generated_count)
     return convert_hex_palette(palette, output_format)
 
 

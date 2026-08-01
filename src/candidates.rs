@@ -1,3 +1,5 @@
+use std::num::NonZeroU8;
+
 use crate::color::{
     relative_luminance_srgb, wcag_contrast_ratio, wcag_contrast_ratio_from_luminance, ColorProfile,
     ColorblindMode, Oklab, Rgb8,
@@ -40,7 +42,7 @@ pub enum GridSize {
     /// Search channels in steps of 4 for a larger, slower search.
     Fine,
     /// Search channels using the given nonzero step in `1..=255`.
-    Step(u8),
+    Step(NonZeroU8),
 }
 
 /// Validated inclusive OKLab lightness bounds.
@@ -104,13 +106,19 @@ enum PreparedBackgroundFilter {
 }
 
 impl GridSize {
-    pub(crate) fn step(self) -> Result<u8> {
+    /// Create a custom RGB channel step, rejecting zero immediately.
+    pub fn try_step(step: u8) -> Result<Self> {
+        NonZeroU8::new(step)
+            .map(Self::Step)
+            .ok_or(GlasbeyError::InvalidGridStep)
+    }
+
+    pub(crate) fn step(self) -> u8 {
         match self {
-            Self::Coarse => Ok(16),
-            Self::Medium => Ok(8),
-            Self::Fine => Ok(4),
-            Self::Step(0) => Err(GlasbeyError::InvalidGridStep),
-            Self::Step(step) => Ok(step),
+            Self::Coarse => 16,
+            Self::Medium => 8,
+            Self::Fine => 4,
+            Self::Step(step) => step.get(),
         }
     }
 }
@@ -292,7 +300,7 @@ pub(crate) fn generate_candidates_with_background_filter(
 ) -> Result<Vec<Candidate>> {
     let background_filter = background_filter.prepare()?;
 
-    let channel_values = channel_values(grid_size.step()?);
+    let channel_values = channel_values(grid_size.step());
     let mut candidates =
         Vec::with_capacity(channel_values.len() * channel_values.len() * channel_values.len());
 
@@ -521,7 +529,7 @@ mod tests {
     }
 
     fn small_candidates(constraints: CandidateConstraints) -> Result<Vec<Candidate>> {
-        generate_candidates(GridSize::Step(255), constraints, 0)
+        generate_candidates(GridSize::try_step(255).unwrap(), constraints, 0)
     }
 
     #[test]
@@ -548,8 +556,12 @@ mod tests {
 
     #[test]
     fn custom_grid_includes_zero_and_255() {
-        let candidates =
-            generate_candidates(GridSize::Step(250), CandidateConstraints::default(), 0).unwrap();
+        let candidates = generate_candidates(
+            GridSize::try_step(250).unwrap(),
+            CandidateConstraints::default(),
+            0,
+        )
+        .unwrap();
 
         assert_eq!(candidates.len(), 27);
         assert_eq!(candidates.first().unwrap().rgb, rgb(0, 0, 0));
@@ -559,15 +571,19 @@ mod tests {
     #[test]
     fn rejects_zero_grid_step() {
         assert!(matches!(
-            generate_candidates(GridSize::Step(0), CandidateConstraints::default(), 0),
+            GridSize::try_step(0),
             Err(GlasbeyError::InvalidGridStep)
         ));
     }
 
     #[test]
     fn candidate_order_is_stable() {
-        let candidates =
-            generate_candidates(GridSize::Step(255), CandidateConstraints::default(), 0).unwrap();
+        let candidates = generate_candidates(
+            GridSize::try_step(255).unwrap(),
+            CandidateConstraints::default(),
+            0,
+        )
+        .unwrap();
 
         assert_eq!(
             rgb_values(&candidates),
@@ -646,7 +662,7 @@ mod tests {
     fn filters_by_background_contrast_distance() {
         let backgrounds = [rgb(255, 255, 255)];
         let candidates = generate_candidates_with_background_filter(
-            GridSize::Step(255),
+            GridSize::try_step(255).unwrap(),
             CandidateConstraints::default(),
             BackgroundFilter::NormalOklabDistance {
                 backgrounds: &backgrounds,
@@ -667,7 +683,7 @@ mod tests {
     fn background_filter_can_apply_multiple_backgrounds() {
         let backgrounds = [rgb(255, 255, 255), rgb(0, 0, 0)];
         let candidates = generate_candidates_with_background_filter(
-            GridSize::Step(255),
+            GridSize::try_step(255).unwrap(),
             CandidateConstraints::default(),
             BackgroundFilter::NormalOklabDistance {
                 backgrounds: &backgrounds,
@@ -688,7 +704,7 @@ mod tests {
     fn filters_by_wcag_non_text_contrast() {
         let backgrounds = [rgb(255, 255, 255)];
         let candidates = generate_candidates_with_background_filter(
-            GridSize::Step(255),
+            GridSize::try_step(255).unwrap(),
             CandidateConstraints::default(),
             BackgroundFilter::WcagNonTextContrast {
                 backgrounds: &backgrounds,
@@ -735,8 +751,12 @@ mod tests {
 
     #[test]
     fn errors_when_too_few_candidates_remain() {
-        let error = generate_candidates(GridSize::Step(255), CandidateConstraints::default(), 9)
-            .unwrap_err();
+        let error = generate_candidates(
+            GridSize::try_step(255).unwrap(),
+            CandidateConstraints::default(),
+            9,
+        )
+        .unwrap_err();
 
         assert!(matches!(
             error,

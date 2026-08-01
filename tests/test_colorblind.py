@@ -128,15 +128,12 @@ def test_colorblind_mode_composes_with_wcag_background_contrast(
     background_contrast: str,
 ) -> None:
     background = "#ffffff"
-    palette = cast(
-        list[str],
-        create_palette(
-            8,
-            background=background,
-            background_contrast=cast(Any, background_contrast),
-            colorblind_mode="all",
-            grid_size=32,
-        ),
+    palette = create_palette(
+        8,
+        background=background,
+        background_contrast=cast(Any, background_contrast),
+        colorblind_mode="all",
+        grid_size=32,
     )
 
     assert all(_contrast_ratio(color, background) >= 3.0 for color in palette)

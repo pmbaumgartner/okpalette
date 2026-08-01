@@ -1,10 +1,11 @@
 use okpalette::{
     extend_palette, generate_palette, BackgroundContrast, CandidateConstraints, ChromaRange,
-    DistanceWeights, GridSize, LabelPaletteRequest, LightnessRange, PaletteGenerator, Rgb8,
+    DistanceWeights, GridSize, LabelPaletteRequest, LightnessRange, OkPaletteError,
+    PaletteGenerator, Rgb8,
 };
 
 fn fast_generator() -> PaletteGenerator {
-    PaletteGenerator::new().grid_size(GridSize::Step(64))
+    PaletteGenerator::new().grid_size(GridSize::try_step(64).unwrap())
 }
 
 #[test]
@@ -27,6 +28,7 @@ fn generator_supports_typed_common_options_and_extensions() {
     let generator = fast_generator()
         .seed_colors([red])
         .backgrounds([white], BackgroundContrast::Normal)
+        .unwrap()
         .constraints(
             CandidateConstraints::new()
                 .with_lightness(LightnessRange::new(0.2, 0.9).unwrap())
@@ -55,6 +57,21 @@ fn generator_rejects_an_extension_target_smaller_than_the_palette() {
         .unwrap_err();
 
     assert!(error.to_string().contains("target_size"));
+}
+
+#[test]
+fn invalid_generator_configuration_is_rejected_at_construction() {
+    assert!(matches!(
+        GridSize::try_step(0),
+        Err(OkPaletteError::InvalidGridStep)
+    ));
+    assert!(matches!(
+        PaletteGenerator::new().backgrounds([], BackgroundContrast::Normal),
+        Err(OkPaletteError::InvalidConstraintRange {
+            constraint: "background",
+            ..
+        })
+    ));
 }
 
 #[test]

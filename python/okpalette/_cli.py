@@ -85,7 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     extend.add_argument(
         "--generated-only",
         action="store_true",
-        help="Return only generated colors instead of prepending existing colors.",
+        help=(
+            "Return only the colors needed to reach TARGET_SIZE instead of prepending "
+            "existing colors."
+        ),
     )
     _add_common_palette_options(extend)
     extend.set_defaults(func=_extend_command)

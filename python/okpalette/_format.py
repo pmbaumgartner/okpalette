@@ -104,6 +104,16 @@ def validate_positive_size(name: str, value: int) -> int:
     return value
 
 
+def validate_nonnegative_size(name: str, value: int) -> int:
+    if type(value) is not int:
+        raise ValueError(f"{name} must be an integer")
+
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+
+    return value
+
+
 def validate_format(output_format: object) -> ColorFormat:
     if output_format not in _FORMATS:
         raise ValueError("format must be 'hex', 'rgb', or 'rgb01'")
@@ -186,8 +196,6 @@ def _normalize_rgb_tuple(color: Tuple[object, ...]) -> str:
 
     if all(type(component) is int for component in color):
         red, green, blue = cast(Rgb8, color)
-        if all(component in (0, 1) for component in (red, green, blue)):
-            raise ValueError("ambiguous integer RGB tuple; use 0..255 integers or 0.0..1.0 floats")
         for component in (red, green, blue):
             if not 0 <= component <= 255:
                 raise ValueError("integer RGB tuple components must be in 0..255")

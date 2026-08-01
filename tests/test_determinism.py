@@ -12,8 +12,8 @@ HEX_DIGITS = "0123456789abcdef"
 
 
 def test_repeated_default_calls_produce_identical_unique_output() -> None:
-    first = cast(list[str], create_palette(24))
-    second = cast(list[str], create_palette(24))
+    first = create_palette(24)
+    second = create_palette(24)
 
     assert first == second
     assert_hex_palette(first, 24)
@@ -35,16 +35,13 @@ def test_small_valid_palettes_are_unique_hex_and_deterministic(
     chroma: tuple[float | None, float | None] | None,
 ) -> None:
     background_contrast = None if background is None else "normal"
-    first = cast(
-        list[str],
-        create_palette(
-            palette_size,
-            grid_size=grid_size,
-            background=background,
-            background_contrast=background_contrast,
-            lightness=lightness,
-            chroma=chroma,
-        ),
+    first = create_palette(
+        palette_size,
+        grid_size=grid_size,
+        background=background,
+        background_contrast=background_contrast,
+        lightness=lightness,
+        chroma=chroma,
     )
     second = create_palette(
         palette_size,

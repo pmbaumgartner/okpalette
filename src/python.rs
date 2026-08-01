@@ -58,10 +58,12 @@ impl PyPaletteGenerator {
             .distance_weights(weights)
             .colorblind_mode(colorblind_mode);
         if let Some(contrast) = background_contrast {
-            generator = generator.backgrounds(
-                backgrounds.expect("validated backgrounds are present"),
-                contrast,
-            );
+            generator = generator
+                .backgrounds(
+                    backgrounds.expect("validated backgrounds are present"),
+                    contrast,
+                )
+                .map_err(to_py_value_error)?;
         }
 
         Ok(Self { generator })
@@ -161,14 +163,14 @@ fn parse_constraints(
 }
 
 fn parse_grid_size(grid_step: i64) -> Result<GridSize, GlasbeyError> {
-    u8::try_from(grid_step)
-        .ok()
-        .filter(|&step| step > 0)
-        .map(GridSize::Step)
-        .ok_or(GlasbeyError::InvalidConstraintRange {
-            constraint: "grid_size",
-            message: "must be an integer in 1..=255",
-        })
+    let step = u8::try_from(grid_step).map_err(|_| GlasbeyError::InvalidConstraintRange {
+        constraint: "grid_size",
+        message: "must be an integer in 1..=255",
+    })?;
+    GridSize::try_step(step).map_err(|_| GlasbeyError::InvalidConstraintRange {
+        constraint: "grid_size",
+        message: "must be an integer in 1..=255",
+    })
 }
 
 fn parse_background_contrast(

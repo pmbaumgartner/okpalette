@@ -46,6 +46,8 @@ If existing colors should only guide generation, return generated colors only:
 okpalette extend 6 --color "#0057b8" --generated-only
 ```
 
+The size remains the final target size; this example returns five new colors.
+
 ### User Has Labels And Positions
 
 Use Python for position-aware label colors:
@@ -94,7 +96,7 @@ okpalette create 8
 The success output is JSON:
 
 ```json
-{"colors":["#080050","#e00800"],"format":"hex"}
+{"colors":["#000058","#90ff00"],"format":"hex"}
 ```
 
 Select RGB tuple formats when the caller asks for them:
@@ -115,6 +117,8 @@ Return only generated colors while using existing colors as anchors:
 ```bash
 okpalette extend 6 --color "#0057b8" --generated-only
 ```
+
+The command returns only the five colors needed to reach a final size of six.
 
 Use background filtering only when both options are present:
 
