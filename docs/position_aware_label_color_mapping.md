@@ -113,13 +113,14 @@ Default graph construction:
 1. Normalize positions to Rust vectors plus dimensionality.
 2. If input points exceed `max_points`, take a deterministic label-balanced
    sample. Keep rare labels represented.
-3. Build a Rust k-d tree with `kiddo`.
-4. For each retained point, find nearest different-label contacts.
+3. Bulk-load one Rust R-tree per label with `rstar`.
+4. For each retained point, merge candidates from the other label trees to find
+   the exact nearest different-label contacts within the retained sample.
 5. Accumulate label-label edge weights with rank and distance decay.
 6. Normalize edge weights to `0..1`.
 
-This treats the graph as a stable estimate of local label confusion, not a
-perfect contact census. That matches the goal: fast and good enough.
+Sampling makes the graph a stable estimate of local label confusion rather than
+a perfect contact census. Neighbor lookup within that sample is exact.
 
 Use exact all-points preprocessing only when `max_points=None`. Keep exact
 all-pairs scans only for tiny inputs or tests.

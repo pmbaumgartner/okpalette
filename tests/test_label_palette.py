@@ -51,6 +51,42 @@ def test_label_palette_is_deterministic() -> None:
     assert first == second
 
 
+def test_label_palette_accepts_many_points_with_same_axis_coordinate() -> None:
+    positions = [(0.0, float(index)) for index in range(33)]
+    labels = [f"label-{index % 3}" for index in range(33)]
+
+    palette = create_label_palette(positions, labels, max_points=None, grid_size=64)
+
+    assert list(palette) == ["label-0", "label-1", "label-2"]
+
+
+def test_dense_labels_preserve_position_aware_adjacency() -> None:
+    def create_dense_palette(centers: tuple[float, float, float]) -> dict[str, str]:
+        positions: list[float] = []
+        labels: list[str] = []
+        for label, center in zip(("a", "b", "c"), centers):
+            for offset in range(33):
+                positions.append(center + offset * 0.000_01)
+                labels.append(label)
+        return cast(
+            dict[str, str],
+            create_label_palette(
+                positions,
+                labels,
+                neighbors=1,
+                max_points=None,
+                grid_size=64,
+            ),
+        )
+
+    adjacent_ab = create_dense_palette((0.0, 1.0, 100.0))
+    adjacent_ac = create_dense_palette((0.0, 100.0, 1.0))
+
+    assert adjacent_ab["a"] == adjacent_ac["a"]
+    assert adjacent_ab["b"] == adjacent_ac["c"]
+    assert adjacent_ab["c"] == adjacent_ac["b"]
+
+
 def test_empty_label_palette_returns_empty_dict() -> None:
     assert create_label_palette([], []) == {}
 

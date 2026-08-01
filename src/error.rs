@@ -35,13 +35,6 @@ pub enum GlasbeyError {
         message: &'static str,
     },
 
-    /// Background colors and the selected contrast mode were inconsistent.
-    #[error("{message}")]
-    InvalidBackgroundConfiguration {
-        /// Explanation of the required background configuration.
-        message: &'static str,
-    },
-
     /// The lightness or chroma distance weights were invalid.
     #[error("invalid distance weights: {message}")]
     InvalidDistanceWeights {

@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[pyclass(name = "_PaletteGenerator")]
+#[derive(Debug)]
 struct PyPaletteGenerator {
     generator: PaletteGenerator,
 }
@@ -16,102 +17,91 @@ struct PyPaletteGenerator {
 #[pymethods]
 impl PyPaletteGenerator {
     #[new]
-    fn new() -> Self {
-        Self {
-            generator: PaletteGenerator::new(),
-        }
-    }
-
-    fn set_seed_colors(&mut self, colors: Vec<String>) -> PyResult<()> {
-        let colors = parse_hex_colors(colors).map_err(to_py_value_error)?;
-        self.generator = self.generator.clone().seed_colors(colors);
-        Ok(())
-    }
-
-    fn set_avoid_colors(&mut self, colors: Vec<String>) -> PyResult<()> {
-        let colors = parse_hex_colors(colors).map_err(to_py_value_error)?;
-        self.generator = self.generator.clone().avoid_colors(colors);
-        Ok(())
-    }
-
-    fn set_backgrounds(
-        &mut self,
-        colors: Option<Vec<String>>,
-        contrast: Option<String>,
-    ) -> PyResult<()> {
-        let backgrounds = colors
-            .map(parse_hex_colors)
-            .transpose()
-            .map_err(to_py_value_error)?;
-        let contrast = parse_background_contrast(backgrounds.as_deref(), contrast.as_deref())
-            .map_err(to_py_value_error)?;
-        if let Some(contrast) = contrast {
-            self.generator = self.generator.clone().backgrounds(
-                backgrounds.expect("validated backgrounds are present"),
-                contrast,
-            );
-        }
-        Ok(())
-    }
-
-    fn set_constraints(
-        &mut self,
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        seed_colors: Vec<String>,
+        avoid_colors: Vec<String>,
+        backgrounds: Option<Vec<String>>,
+        background_contrast: Option<String>,
         lightness: Option<(f32, f32)>,
         chroma: Option<(Option<f32>, Option<f32>)>,
         hue: Option<(f32, f32)>,
-    ) -> PyResult<()> {
-        let mut constraints = CandidateConstraints::new();
-        if let Some((minimum, maximum)) = lightness {
-            constraints = constraints
-                .with_lightness(LightnessRange::new(minimum, maximum).map_err(to_py_value_error)?);
-        }
-        if let Some((minimum, maximum)) = chroma {
-            constraints = constraints
-                .with_chroma(ChromaRange::new(minimum, maximum).map_err(to_py_value_error)?);
-        }
-        if let Some((start, end)) = hue {
-            constraints =
-                constraints.with_hue(HueRange::new(start, end).map_err(to_py_value_error)?);
-        }
-        self.generator = self.generator.clone().constraints(constraints);
-        Ok(())
-    }
-
-    fn set_grid_step(&mut self, grid_step: i64) -> PyResult<()> {
-        let grid_step = u8::try_from(grid_step)
-            .ok()
-            .filter(|&step| step > 0)
-            .ok_or(GlasbeyError::InvalidConstraintRange {
-                constraint: "grid_size",
-                message: "must be an integer in 1..255",
-            })
+        grid_step: i64,
+        lightness_weight: f32,
+        chroma_weight: f32,
+        colorblind_mode: Option<String>,
+    ) -> PyResult<Self> {
+        let seed_colors = parse_hex_colors(seed_colors).map_err(to_py_value_error)?;
+        let avoid_colors = parse_hex_colors(avoid_colors).map_err(to_py_value_error)?;
+        let backgrounds = backgrounds
+            .map(parse_hex_colors)
+            .transpose()
             .map_err(to_py_value_error)?;
-        self.generator = self.generator.clone().grid_size(GridSize::Step(grid_step));
-        Ok(())
-    }
-
-    fn set_distance_weights(&mut self, lightness: f32, chroma: f32) -> PyResult<()> {
-        let weights = DistanceWeights::new(lightness, chroma).map_err(to_py_value_error)?;
-        self.generator = self.generator.clone().distance_weights(weights);
-        Ok(())
-    }
-
-    fn set_colorblind_mode(&mut self, mode: Option<String>) -> PyResult<()> {
-        let mode = mode
+        let background_contrast =
+            parse_background_contrast(backgrounds.as_deref(), background_contrast.as_deref())?;
+        let constraints = parse_constraints(lightness, chroma, hue).map_err(to_py_value_error)?;
+        let grid_size = parse_grid_size(grid_step).map_err(to_py_value_error)?;
+        let weights =
+            DistanceWeights::new(lightness_weight, chroma_weight).map_err(to_py_value_error)?;
+        let colorblind_mode = colorblind_mode
             .as_deref()
             .map(str::parse)
             .transpose()
             .map_err(to_py_value_error)?
             .unwrap_or_default();
-        self.generator = self.generator.clone().colorblind_mode(mode);
-        Ok(())
+
+        let mut generator = PaletteGenerator::new()
+            .seed_colors(seed_colors)
+            .avoid_colors(avoid_colors)
+            .constraints(constraints)
+            .grid_size(grid_size)
+            .distance_weights(weights)
+            .colorblind_mode(colorblind_mode);
+        if let Some(contrast) = background_contrast {
+            generator = generator.backgrounds(
+                backgrounds.expect("validated backgrounds are present"),
+                contrast,
+            );
+        }
+
+        Ok(Self { generator })
     }
 
     fn generate(&self, py: Python<'_>, palette_size: usize) -> PyResult<Vec<String>> {
         let generator = self.generator.clone();
         py.detach(move || generator.generate(palette_size))
-            .map(|palette| palette.into_iter().map(Rgb8::to_hex).collect())
+            .map(palette_to_hex)
             .map_err(to_py_value_error)
+    }
+
+    fn extend(
+        &self,
+        py: Python<'_>,
+        colors: Vec<String>,
+        target_size: usize,
+    ) -> PyResult<Vec<String>> {
+        let generator = self.generator.clone();
+        py.detach(move || {
+            let colors = parse_hex_colors(colors)?;
+            generator.extend(&colors, target_size)
+        })
+        .map(palette_to_hex)
+        .map_err(to_py_value_error)
+    }
+
+    fn generate_extension(
+        &self,
+        py: Python<'_>,
+        colors: Vec<String>,
+        count: usize,
+    ) -> PyResult<Vec<String>> {
+        let generator = self.generator.clone();
+        py.detach(move || {
+            let colors = parse_hex_colors(colors)?;
+            generator.generate_extension(&colors, count)
+        })
+        .map(palette_to_hex)
+        .map_err(to_py_value_error)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -139,7 +129,7 @@ impl PyPaletteGenerator {
                     .max_points(max_points);
             generator.generate_for_labels(request)
         })
-        .map(|palette| palette.into_iter().map(Rgb8::to_hex).collect())
+        .map(palette_to_hex)
         .map_err(to_py_value_error)
     }
 }
@@ -148,27 +138,59 @@ fn parse_hex_colors(colors: Vec<String>) -> Result<Vec<Rgb8>, GlasbeyError> {
     colors.iter().map(|color| parse_hex_color(color)).collect()
 }
 
+fn palette_to_hex(palette: Vec<Rgb8>) -> Vec<String> {
+    palette.into_iter().map(Rgb8::to_hex).collect()
+}
+
+fn parse_constraints(
+    lightness: Option<(f32, f32)>,
+    chroma: Option<(Option<f32>, Option<f32>)>,
+    hue: Option<(f32, f32)>,
+) -> Result<CandidateConstraints, GlasbeyError> {
+    let mut constraints = CandidateConstraints::new();
+    if let Some((minimum, maximum)) = lightness {
+        constraints = constraints.with_lightness(LightnessRange::new(minimum, maximum)?);
+    }
+    if let Some((minimum, maximum)) = chroma {
+        constraints = constraints.with_chroma(ChromaRange::new(minimum, maximum)?);
+    }
+    if let Some((start, end)) = hue {
+        constraints = constraints.with_hue(HueRange::new(start, end)?);
+    }
+    Ok(constraints)
+}
+
+fn parse_grid_size(grid_step: i64) -> Result<GridSize, GlasbeyError> {
+    u8::try_from(grid_step)
+        .ok()
+        .filter(|&step| step > 0)
+        .map(GridSize::Step)
+        .ok_or(GlasbeyError::InvalidConstraintRange {
+            constraint: "grid_size",
+            message: "must be an integer in 1..=255",
+        })
+}
+
 fn parse_background_contrast(
     backgrounds: Option<&[Rgb8]>,
     value: Option<&str>,
-) -> Result<Option<BackgroundContrast>, GlasbeyError> {
+) -> PyResult<Option<BackgroundContrast>> {
     match (backgrounds, value) {
         (None, None) => Ok(None),
-        (Some(_), None) => Err(GlasbeyError::InvalidBackgroundConfiguration {
-            message: "background_contrast must be provided when background is set",
-        }),
-        (None, Some(_)) => Err(GlasbeyError::InvalidBackgroundConfiguration {
-            message: "background must be provided when background_contrast is set",
-        }),
-        (Some([]), Some(_)) => Err(GlasbeyError::InvalidBackgroundConfiguration {
-            message: "background must contain at least one color",
-        }),
+        (Some(_), None) => Err(PyValueError::new_err(
+            "background_contrast must be provided when background is set",
+        )),
+        (None, Some(_)) => Err(PyValueError::new_err(
+            "background must be provided when background_contrast is set",
+        )),
+        (Some([]), Some(_)) => Err(PyValueError::new_err(
+            "background must contain at least one color",
+        )),
         (Some(_), Some("normal")) => Ok(Some(BackgroundContrast::Normal)),
         (Some(_), Some("high" | "wcag")) => Ok(Some(BackgroundContrast::Wcag)),
-        (Some(_), Some(_)) => Err(GlasbeyError::InvalidConstraintRange {
-            constraint: "background_contrast",
-            message: "must be 'normal', 'high', 'wcag', or None",
-        }),
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "background_contrast must be 'normal', 'high', 'wcag', or None",
+        )),
     }
 }
 
@@ -215,17 +237,38 @@ mod tests {
         Python::attach(operation)
     }
 
+    fn native_generator(
+        seed_colors: Vec<String>,
+        backgrounds: Option<Vec<String>>,
+        background_contrast: Option<String>,
+        grid_step: i64,
+        colorblind_mode: Option<String>,
+    ) -> PyResult<PyPaletteGenerator> {
+        PyPaletteGenerator::new(
+            seed_colors,
+            Vec::new(),
+            backgrounds,
+            background_contrast,
+            None,
+            None,
+            None,
+            grid_step,
+            1.0,
+            1.0,
+            colorblind_mode,
+        )
+    }
+
     #[test]
     fn native_bridge_generates_canonical_hex_palette() {
-        let mut generator = PyPaletteGenerator::new();
-        generator.set_seed_colors(vec!["#f00".to_owned()]).unwrap();
-        generator
-            .set_backgrounds(Some(vec!["#fff".to_owned()]), Some("normal".to_owned()))
-            .unwrap();
-        generator
-            .set_constraints(Some((0.2, 0.9)), Some((Some(0.04), None)), None)
-            .unwrap();
-        generator.set_grid_step(64).unwrap();
+        let generator = native_generator(
+            vec!["#f00".to_owned()],
+            Some(vec!["#fff".to_owned()]),
+            Some("normal".to_owned()),
+            64,
+            None,
+        )
+        .unwrap();
         let palette = run_with_python(|py| generator.generate(py, 3)).unwrap();
 
         assert_canonical_hex_palette(&palette, 3);
@@ -235,19 +278,15 @@ mod tests {
 
     #[test]
     fn native_bridge_maps_engine_errors() {
-        let mut generator = PyPaletteGenerator::new();
-        let error = generator
-            .set_seed_colors(vec!["not-a-color".to_owned()])
-            .unwrap_err();
+        let error =
+            native_generator(vec!["not-a-color".to_owned()], None, None, 64, None).unwrap_err();
 
         assert!(error.to_string().contains("invalid hex color length"));
     }
 
     #[test]
     fn native_bridge_reports_insufficient_candidates() {
-        let mut generator = PyPaletteGenerator::new();
-        generator.set_grid_step(255).unwrap();
-        generator.set_constraints(None, None, None).unwrap();
+        let generator = native_generator(Vec::new(), None, None, 255, None).unwrap();
         let error = run_with_python(|py| generator.generate(py, 9)).unwrap_err();
 
         assert!(error.to_string().contains("only 8 candidate colors"));
@@ -255,9 +294,7 @@ mod tests {
 
     #[test]
     fn native_bridge_rejects_invalid_colorblind_mode() {
-        let mut generator = PyPaletteGenerator::new();
-        let error = generator
-            .set_colorblind_mode(Some("protanopia".to_owned()))
+        let error = native_generator(Vec::new(), None, None, 64, Some("protanopia".to_owned()))
             .unwrap_err();
 
         assert!(error.to_string().contains("colorblind_mode"));
@@ -265,14 +302,14 @@ mod tests {
 
     #[test]
     fn native_bridge_rejects_high_contrast_seed_failures() {
-        let mut generator = PyPaletteGenerator::new();
-        generator
-            .set_seed_colors(vec!["#ffffff".to_owned()])
-            .unwrap();
-        generator
-            .set_backgrounds(Some(vec!["#ffffff".to_owned()]), Some("high".to_owned()))
-            .unwrap();
-        generator.set_grid_step(255).unwrap();
+        let generator = native_generator(
+            vec!["#ffffff".to_owned()],
+            Some(vec!["#ffffff".to_owned()]),
+            Some("high".to_owned()),
+            255,
+            None,
+        )
+        .unwrap();
         let error = run_with_python(|py| generator.generate(py, 1)).unwrap_err();
 
         assert!(error.to_string().contains("#ffffff"));
@@ -280,9 +317,7 @@ mod tests {
 
     #[test]
     fn native_bridge_generates_label_palette_with_fixed_colors() {
-        let mut generator = PyPaletteGenerator::new();
-        generator.set_grid_step(64).unwrap();
-        generator.set_constraints(None, None, None).unwrap();
+        let generator = native_generator(Vec::new(), None, None, 64, None).unwrap();
         let palette = run_with_python(|py| {
             generator.generate_for_labels(
                 py,
@@ -299,6 +334,19 @@ mod tests {
 
         assert_canonical_hex_palette(&palette, 3);
         assert_eq!(palette[1], "#ff0000");
+    }
+
+    #[test]
+    fn native_bridge_uses_canonical_extension_methods() {
+        let generator = native_generator(Vec::new(), None, None, 64, None).unwrap();
+        let existing = vec!["#ff0000".to_owned()];
+
+        let extended = run_with_python(|py| generator.extend(py, existing.clone(), 3)).unwrap();
+        let generated =
+            run_with_python(|py| generator.generate_extension(py, existing, 2)).unwrap();
+
+        assert_eq!(extended[0], "#ff0000");
+        assert_eq!(&extended[1..], generated);
     }
 
     #[test]

@@ -97,3 +97,6 @@ jobs:
 
       - name: Run ty
         run: uv run --extra dev ty check
+
+      - name: Verify native extension stub
+        run: uv run --extra dev python -m mypy.stubtest okpalette._core

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use kiddo::{KdTree, SquaredEuclidean};
+use rstar::{primitives::GeomWithData, RTree};
 
 use super::sampling::{deterministic_sample, SamplePoint};
 use super::ValidatedLabelGeometry;
@@ -18,23 +18,20 @@ pub(super) fn build_label_graph(geometry: ValidatedLabelGeometry<'_>) -> LabelGr
     let sample = deterministic_sample(geometry);
 
     match geometry.dimension {
-        1 => build_label_graph_for_dimension::<1>(
+        1 => build_label_graph_for_dimension::<1, 2>(
             geometry.coordinates,
-            geometry.label_ids,
             &sample,
             geometry.label_count,
             geometry.neighbors,
         ),
-        2 => build_label_graph_for_dimension::<2>(
+        2 => build_label_graph_for_dimension::<2, 2>(
             geometry.coordinates,
-            geometry.label_ids,
             &sample,
             geometry.label_count,
             geometry.neighbors,
         ),
-        3 => build_label_graph_for_dimension::<3>(
+        3 => build_label_graph_for_dimension::<3, 3>(
             geometry.coordinates,
-            geometry.label_ids,
             &sample,
             geometry.label_count,
             geometry.neighbors,
@@ -43,48 +40,19 @@ pub(super) fn build_label_graph(geometry: ValidatedLabelGeometry<'_>) -> LabelGr
     }
 }
 
-fn build_label_graph_for_dimension<const D: usize>(
+fn build_label_graph_for_dimension<const SOURCE_D: usize, const INDEX_D: usize>(
     coordinates: &[f64],
-    label_ids: &[usize],
     sample: &[SamplePoint],
     label_count: usize,
     neighbors: usize,
 ) -> LabelGraph {
-    let mut tree: KdTree<f64, D> = KdTree::new();
-    for (sample_index, point) in sample.iter().enumerate() {
-        tree.add(
-            &point_for_dimension::<D>(coordinates, point.original_index),
-            sample_index as u64,
-        );
-    }
-
-    let search_count = sample.len().min(
-        (neighbors.saturating_mul(8) + 1)
-            .max(label_count.saturating_mul(2))
-            .max(32),
-    );
+    let trees = build_label_trees::<SOURCE_D, INDEX_D>(coordinates, sample, label_count);
     let mut weights: HashMap<(usize, usize), f64> = HashMap::new();
 
     for point in sample {
         let query_label = point.label_id;
-        let query = point_for_dimension::<D>(coordinates, point.original_index);
-        let nearest = tree.nearest_n::<SquaredEuclidean>(&query, search_count);
-        let mut contacts = Vec::new();
-
-        for neighbor in nearest {
-            let neighbor_point = sample[neighbor.item as usize];
-            let neighbor_label = label_ids[neighbor_point.original_index];
-            if neighbor_point.original_index == point.original_index
-                || neighbor_label == query_label
-            {
-                continue;
-            }
-
-            contacts.push((neighbor_label, neighbor.distance));
-            if contacts.len() == neighbors {
-                break;
-            }
-        }
+        let query = point_for_index::<SOURCE_D, INDEX_D>(coordinates, point.original_index);
+        let contacts = nearest_different_label_contacts(&trees, query, query_label, neighbors);
 
         if contacts.is_empty() {
             continue;
@@ -103,9 +71,65 @@ fn build_label_graph_for_dimension<const D: usize>(
     LabelGraph::from_weights(label_count, weights)
 }
 
-fn point_for_dimension<const D: usize>(coordinates: &[f64], point_index: usize) -> [f64; D] {
-    let start = point_index * D;
-    std::array::from_fn(|offset| coordinates[start + offset])
+type IndexedPoint<const D: usize> = GeomWithData<[f64; D], usize>;
+
+fn build_label_trees<const SOURCE_D: usize, const INDEX_D: usize>(
+    coordinates: &[f64],
+    sample: &[SamplePoint],
+    label_count: usize,
+) -> Vec<RTree<IndexedPoint<INDEX_D>>> {
+    let mut points_by_label = vec![Vec::new(); label_count];
+    for point in sample {
+        points_by_label[point.label_id].push(IndexedPoint::new(
+            point_for_index::<SOURCE_D, INDEX_D>(coordinates, point.original_index),
+            point.original_index,
+        ));
+    }
+
+    points_by_label.into_iter().map(RTree::bulk_load).collect()
+}
+
+fn nearest_different_label_contacts<const D: usize>(
+    trees: &[RTree<IndexedPoint<D>>],
+    query: [f64; D],
+    query_label: usize,
+    neighbors: usize,
+) -> Vec<(usize, f64)> {
+    let mut contacts: Vec<(usize, f64, usize)> = trees
+        .iter()
+        .enumerate()
+        .filter(|(label_id, _)| *label_id != query_label)
+        .flat_map(|(label_id, tree)| {
+            tree.nearest_neighbor_iter_with_distance_2(query)
+                .take(neighbors)
+                .map(move |(point, distance)| (label_id, distance, point.data))
+        })
+        .collect();
+    contacts.sort_by(|left, right| {
+        left.1
+            .total_cmp(&right.1)
+            .then_with(|| left.0.cmp(&right.0))
+            .then_with(|| left.2.cmp(&right.2))
+    });
+    contacts.truncate(neighbors);
+    contacts
+        .into_iter()
+        .map(|(label_id, distance, _)| (label_id, distance))
+        .collect()
+}
+
+fn point_for_index<const SOURCE_D: usize, const INDEX_D: usize>(
+    coordinates: &[f64],
+    point_index: usize,
+) -> [f64; INDEX_D] {
+    let start = point_index * SOURCE_D;
+    std::array::from_fn(|offset| {
+        if offset < SOURCE_D {
+            coordinates[start + offset]
+        } else {
+            0.0
+        }
+    })
 }
 
 fn ordered_pair(left: usize, right: usize) -> (usize, usize) {
@@ -196,5 +220,54 @@ mod tests {
             .iter()
             .flatten()
             .all(|&(_, weight)| weight > 0.0 && weight <= 1.0));
+    }
+
+    #[test]
+    fn graph_accepts_many_points_with_the_same_axis_coordinate() {
+        let mut coordinates = Vec::new();
+        let mut labels = Vec::new();
+        for index in 0..33 {
+            coordinates.extend([0.0, f64::from(index)]);
+            labels.push(index as usize % 3);
+        }
+
+        let graph = build_label_graph(super::super::ValidatedLabelGeometry {
+            coordinates: &coordinates,
+            dimension: 2,
+            label_ids: &labels,
+            label_count: 3,
+            neighbors: 2,
+            max_points: labels.len(),
+        });
+
+        assert!(!graph.is_empty());
+    }
+
+    #[test]
+    fn dense_labels_still_find_the_nearest_different_label() {
+        let mut coordinates = Vec::new();
+        let mut labels = Vec::new();
+        for (label_id, center) in [0.0, 0.1, 10.0].into_iter().enumerate() {
+            for offset in 0..33 {
+                coordinates.push(center + f64::from(offset) * 0.000_01);
+                labels.push(label_id);
+            }
+        }
+
+        let graph = build_label_graph(super::super::ValidatedLabelGeometry {
+            coordinates: &coordinates,
+            dimension: 1,
+            label_ids: &labels,
+            label_count: 3,
+            neighbors: 1,
+            max_points: labels.len(),
+        });
+
+        assert!(graph.adjacency[0]
+            .iter()
+            .any(|&(label_id, _)| label_id == 1));
+        assert!(!graph.adjacency[0]
+            .iter()
+            .any(|&(label_id, _)| label_id == 2));
     }
 }

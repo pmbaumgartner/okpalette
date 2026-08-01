@@ -5,11 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
-from typing import Hashable, List, Optional, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Hashable, List, Optional, Sequence, Tuple, Union, cast
 
 from ._format import (
     Palette,
-    PaletteGeneratorBridge,
     coerce_chroma_pair,
     coerce_float,
     coerce_float_pair,
@@ -40,6 +39,9 @@ from ._types import (
     Rgb01,
     Rgb8,
 )
+
+if TYPE_CHECKING:
+    from ._core import _PaletteGenerator
 
 try:
     __version__ = version("okpalette")
@@ -127,11 +129,10 @@ def extend_palette(
         raise ValueError("include_existing must be a boolean")
 
     existing = normalize_color_sequence(colors, "colors")
-    extra_seeds = normalize_color_sequence(seed_colors, "seed_colors")
     target = validate_positive_size("target_size", target_size)
     output_format = validate_format(format)
     palette_options = _PaletteOptions(
-        seed_colors=[*existing, *extra_seeds],
+        seed_colors=seed_colors,
         avoid_colors=avoid_colors,
         background=background,
         background_contrast=background_contrast,
@@ -144,12 +145,11 @@ def extend_palette(
         colorblind_mode=colorblind_mode,
     )
 
-    if include_existing and target < len(existing):
-        raise ValueError("target_size must be greater than or equal to len(colors)")
-
-    generated_size = target - len(existing) if include_existing else target
-    generated = _generate_palette_hex(generated_size, palette_options)
-    palette = existing + generated if include_existing else generated
+    generator = _build_generator(palette_options)
+    if include_existing:
+        palette = generator.extend(existing, target)
+    else:
+        palette = generator.generate_extension(existing, target)
     return convert_hex_palette(palette, output_format)
 
 
@@ -307,28 +307,22 @@ def _generate_label_palette_hex(
     )
 
 
-def _build_generator(options: _PaletteOptions) -> PaletteGeneratorBridge:
-    generator = load_palette_generator_rs()()
-    generator.set_seed_colors(normalize_color_sequence(options.seed_colors, "seed_colors"))
-    generator.set_avoid_colors(normalize_color_sequence(options.avoid_colors, "avoid_colors"))
-    generator.set_backgrounds(
+def _build_generator(options: _PaletteOptions) -> _PaletteGenerator:
+    return load_palette_generator_rs()(
+        normalize_color_sequence(options.seed_colors, "seed_colors"),
+        normalize_color_sequence(options.avoid_colors, "avoid_colors"),
         None
         if options.background is None
         else normalize_background_colors(options.background, "background"),
         options.background_contrast,
-    )
-    generator.set_constraints(
         coerce_float_pair(options.lightness, "lightness"),
         coerce_chroma_pair(options.chroma),
         coerce_float_pair(options.hue, "hue"),
-    )
-    generator.set_grid_step(resolve_grid_step(options.grid_size))
-    generator.set_distance_weights(
+        resolve_grid_step(options.grid_size),
         coerce_float(options.lightness_weight, "lightness_weight"),
         coerce_float(options.chroma_weight, "chroma_weight"),
+        options.colorblind_mode,
     )
-    generator.set_colorblind_mode(options.colorblind_mode)
-    return generator
 
 
 __all__ = [

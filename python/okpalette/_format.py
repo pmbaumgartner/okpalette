@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from importlib import import_module
-from typing import List, Optional, Protocol, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union, cast
 
 from ._types import (
     BackgroundLike,
@@ -16,45 +16,11 @@ from ._types import (
     Rgb8,
 )
 
+if TYPE_CHECKING:
+    from ._core import _PaletteGenerator
+
 Palette = Union[List[str], List[Rgb8], List[Rgb01]]
 
-
-class PaletteGeneratorBridge(Protocol):
-    def set_seed_colors(self, colors: List[str]) -> None: ...
-
-    def set_avoid_colors(self, colors: List[str]) -> None: ...
-
-    def set_backgrounds(
-        self,
-        colors: Optional[List[str]],
-        contrast: Optional[str],
-    ) -> None: ...
-
-    def set_constraints(
-        self,
-        lightness: Optional[Tuple[float, float]],
-        chroma: Optional[Tuple[Optional[float], Optional[float]]],
-        hue: Optional[Tuple[float, float]],
-    ) -> None: ...
-
-    def set_grid_step(self, grid_step: int) -> None: ...
-
-    def set_distance_weights(self, lightness: float, chroma: float) -> None: ...
-
-    def set_colorblind_mode(self, mode: Optional[str]) -> None: ...
-
-    def generate(self, palette_size: int) -> List[str]: ...
-
-    def generate_for_labels(
-        self,
-        coordinates: List[float],
-        dimension: int,
-        label_ids: List[int],
-        label_count: int,
-        fixed_colors: List[Optional[str]],
-        neighbors: int,
-        max_points: Optional[int],
-    ) -> List[str]: ...
 
 _HEX_RE = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
 _GRID_STEPS = {"coarse": 16, "medium": 8, "fine": 4}
@@ -190,7 +156,7 @@ def convert_hex_palette(colors: Sequence[str], output_format: ColorFormat) -> Pa
     return [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in rgb_colors]
 
 
-def load_palette_generator_rs() -> type[PaletteGeneratorBridge]:
+def load_palette_generator_rs() -> type[_PaletteGenerator]:
     try:
         core = import_module("okpalette._core")
     except ImportError as error:
@@ -199,7 +165,7 @@ def load_palette_generator_rs() -> type[PaletteGeneratorBridge]:
             "or run `maturin develop` in the source checkout."
         ) from error
 
-    return cast(type[PaletteGeneratorBridge], getattr(core, "_PaletteGenerator"))
+    return cast("type[_PaletteGenerator]", getattr(core, "_PaletteGenerator"))
 
 
 def _normalize_hex_color(color: str) -> str:
