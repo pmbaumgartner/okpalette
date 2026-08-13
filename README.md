@@ -1,3 +1,6 @@
+[![okpalette on Crates.io](https://img.shields.io/crates/v/okpalette.svg?color=brightgreen)](https://crates.io/crates/okpalette)
+[![Documentation](https://img.shields.io/docsrs/okpalette/latest.svg)](https://docs.rs/okpalette)
+
 # okpalette
 
 Fast, deterministic categorical color palettes for Python.
