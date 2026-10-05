@@ -11,9 +11,13 @@ requires-python = ">=3.12"
 license = "MIT"
 keywords = ["color", "palette", "glasbey", "categorical", "oklab", "visualization"]
 classifiers = [
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Typing :: Typed",
 ]
 dependencies = []
 
@@ -24,6 +28,8 @@ okpalette = "okpalette._cli:main"
 Homepage = "https://github.com/pmbaumgartner/okpalette"
 Repository = "https://github.com/pmbaumgartner/okpalette"
 Issues = "https://github.com/pmbaumgartner/okpalette/issues"
+Changelog = "https://github.com/pmbaumgartner/okpalette/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/pmbaumgartner/okpalette#readme"
 
 [project.optional-dependencies]
 dev = [

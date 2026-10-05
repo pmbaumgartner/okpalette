@@ -150,7 +150,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("examples/output/okpalette-word-scatter-logo"),
+        default=Path("examples/output/okpalette-grid-logo"),
         help="Output path base, or a .png path whose suffix will be replaced.",
     )
     args = parser.parse_args()

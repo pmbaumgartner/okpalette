@@ -1,8 +1,39 @@
 # okpalette
 
-Fast, deterministic categorical color palettes for Python.
+[![PyPI](https://img.shields.io/pypi/v/okpalette)](https://pypi.org/project/okpalette/)
+[![Python](https://img.shields.io/pypi/pyversions/okpalette)](https://pypi.org/project/okpalette/)
+[![crates.io](https://img.shields.io/crates/v/okpalette)](https://crates.io/crates/okpalette)
+[![docs.rs](https://img.shields.io/docsrs/okpalette)](https://docs.rs/okpalette)
+[![CI](https://github.com/pmbaumgartner/okpalette/actions/workflows/ci.yml/badge.svg)](https://github.com/pmbaumgartner/okpalette/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/pmbaumgartner/okpalette/blob/main/LICENSE)
+
+Fast, deterministic categorical color palettes for Python, Rust, and the command line.
+
+![Twelve default okpalette colors](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-default-12.png)
 
 Use `okpalette` when you need distinct, stable colors for labels, plots, dashboards, or reports.
+
+## Why okpalette?
+
+- **Any number of colors.** Fixed palettes like `tab10` or `tab20` run out; `okpalette` generates as many maximally distinct colors as you ask for.
+- **Deterministic.** The same inputs always produce the same colors, so charts stay consistent across runs and machines.
+- **Stable extension.** Grow a palette or extend your brand colors without changing the colors you already use.
+- **Position-aware label colors.** Labels that sit close together in a plot get the most distinct colors.
+- **Constraints.** Control lightness, chroma, and hue; keep colors separated from a background; optimize under colorblind simulations.
+- **Lightweight.** No required Python dependencies. The core is written in Rust and is also available as a Rust crate.
+
+Want something calmer than the defaults? Constrain chroma:
+
+```python
+create_palette(12, chroma=(0.02, 0.12))
+```
+
+![Twelve muted okpalette colors](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-muted-12.png)
+
+**When not to use it:** `okpalette` is for categorical data. For ordered or
+continuous values, use a sequential or diverging colormap instead. Beyond
+roughly 20–30 categories, no palette stays easy to tell apart; consider grouping
+categories or labeling them directly.
 
 ## Install
 
@@ -16,9 +47,21 @@ With uv:
 uv add okpalette
 ```
 
+Run the CLI without installing, as a [uv tool](https://docs.astral.sh/uv/concepts/tools/):
+
+```bash
+uvx okpalette create 8
+```
+
+Rust:
+
+```bash
+cargo add okpalette
+```
+
 ## Quickstart
 
-Create stable colors for categories:
+Create colors for categories:
 
 ```python
 from okpalette import create_palette
@@ -27,168 +70,16 @@ colors = create_palette(8)
 # ["#000058", "#90ff00", "#ff38ff", ...]
 ```
 
-Get the same kind of palette from a shell:
-
-```bash
-okpalette create 8
-```
-
-Works great as a [uv tool](https://docs.astral.sh/uv/concepts/tools/):
-
-```bash
-uvx okpalette create 8
-```
-
-CLI success output is JSON only:
-
-```json
-{"colors":["#000058","#90ff00","#ff38ff"],"format":"hex"}
-```
-
 Extend colors you already have:
 
 ```python
 from okpalette import extend_palette
 
 colors = extend_palette(["#0057b8", "#ffd700"], 8)
+# ["#0057b8", "#ffd700", "#ff0070", ...]
 ```
 
-## Rust API
-
-Rust crates can use the generator directly without depending on Python:
-
-```toml
-[dependencies]
-okpalette = "1.1"
-```
-
-The one-shot functions use the same defaults as the Python API and CLI:
-
-```rust
-use okpalette::{extend_palette, generate_palette, Rgb8};
-
-let colors = generate_palette(8).unwrap();
-let brand = [
-    "#0057b8".parse::<Rgb8>().unwrap(),
-    "#ffd700".parse().unwrap(),
-];
-let extended = extend_palette(&brand, 8).unwrap();
-```
-
-Use `PaletteGenerator` for reusable, typed configuration:
-
-```rust
-use okpalette::{
-    BackgroundContrast, CandidateConstraints, ChromaRange, ColorblindMode,
-    DistanceWeights, GridSize, LightnessRange, PaletteGenerator, Rgb8,
-};
-
-let generator = PaletteGenerator::new()
-    .grid_size(GridSize::Fine)
-    .constraints(
-        CandidateConstraints::new()
-            .with_lightness(LightnessRange::new(0.2, 0.9).unwrap())
-            .with_chroma(ChromaRange::new(Some(0.04), None).unwrap()),
-    )
-    .distance_weights(DistanceWeights::new(0.8, 1.2).unwrap())
-    .backgrounds(
-        [Rgb8::new(255, 255, 255)],
-        BackgroundContrast::Normal,
-    )
-    .unwrap()
-    .colorblind_mode(ColorblindMode::All);
-
-let colors = generator.generate(12).unwrap();
-let new_colors = generator.generate_extension(&colors[..2], 10).unwrap();
-```
-
-`LabelPaletteRequest` exposes the position-aware label generator. Typed colors,
-constraints, parsing, and SVG/PNG rendering are also available from the crate
-root; candidate search and label-assignment internals remain private.
-
-Use position-aware label colors when nearby labels should be easier to tell apart:
-
-```python
-from okpalette import create_label_palette
-
-positions = [(0.0, 0.0), (0.2, 0.0), (5.0, 0.0), (5.2, 0.0)]
-labels = ["control", "treated", "control", "outlier"]
-
-label_colors = create_label_palette(positions, labels)
-```
-
-## Example
-
-![Position Aware Example](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png)
-
-## Agent Skill
-
-`okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
-Install it into a personal Codex or Claude skill directory:
-
-```bash
-okpalette install-skill --agent codex
-okpalette install-skill --agent claude
-```
-
-Use `--dry-run` to print the target path without writing, and `--overwrite` to
-replace an existing installed skill. The Codex installer respects `$CODEX_HOME`
-and otherwise writes under `~/.codex`; Claude skills are installed under
-`~/.claude`.
-
-### Formats
-
-Use RGB tuples when that fits your plotting library better:
-
-```python
-rgb = create_palette(5, format="rgb")
-# [(8, 0, 80), (224, 8, 0), ...]
-
-rgb01 = create_palette(5, format="rgb01")
-# [(0.03137254901960784, 0.0, 0.3137254901960784), ...]
-```
-
-## Extend Colors
-
-Use `extend_palette()` when you already have brand colors or a small palette.
-
-```python
-from okpalette import extend_palette
-
-brand = ["#0057b8", "#ffd700"]
-colors = extend_palette(brand, 12)
-
-assert colors[:2] == ["#0057b8", "#ffd700"]
-assert len(colors) == 12
-```
-
-Use existing colors as anchors without returning them:
-
-```python
-new_colors = extend_palette(brand, 10, include_existing=False)
-```
-
-Here `target_size=10` still describes the final palette size, so `new_colors`
-contains eight generated colors when `brand` contains two colors.
-
-The same basic workflows are available through the CLI:
-
-```bash
-okpalette create 10
-okpalette create 5 --format rgb
-okpalette extend 12 --color "#0057b8" --color "#ffd700"
-okpalette extend 10 --color "#0057b8" --generated-only
-```
-
-`okpalette create` and `okpalette extend` always write JSON on success, with
-the stable shape `{"colors":[...],"format":"hex"}`. For `--format rgb` and
-`--format rgb01`, tuple colors are serialized as JSON arrays. Validation and
-generation errors write a short message to stderr and leave stdout empty.
-
-## Map Labels To Colors
-
-Use `create_label_palette()` when positions should influence which label gets
-which color. Nearby or overlapping labels are assigned more distinct colors.
+Give nearby labels more distinct colors:
 
 ```python
 from okpalette import create_label_palette
@@ -200,27 +91,10 @@ colors = create_label_palette(positions, labels)
 # {"control": "#90ff00", "treated": "#000058", "outlier": "#ff38ff"}
 ```
 
-Labels may be strings, integers, tuples, or other hashable Python objects. The
-returned dict preserves first-seen label order.
+From a shell:
 
-Keep specific label colors fixed:
-
-```python
-colors = create_label_palette(
-    positions,
-    labels,
-    fixed_colors={"control": "#0057b8"},
-)
-```
-
-For dataframe-like objects, read position and label columns by duck typing:
-
-```python
-colors = create_label_palette_from_columns(
-    data,
-    positions=["x", "y"],
-    label="cluster",
-)
+```bash
+okpalette create 8
 ```
 
 ## Use With Plotting Libraries
@@ -293,9 +167,86 @@ fig = px.scatter(
 )
 ```
 
+## Extend Colors
+
+Use `extend_palette()` when you already have brand colors or a small palette.
+Existing colors are kept as-is, and new colors are chosen to be distinct from
+them.
+
+```python
+from okpalette import extend_palette
+
+brand = ["#0057b8", "#ffd700"]
+colors = extend_palette(brand, 12)
+
+assert colors[:2] == ["#0057b8", "#ffd700"]
+assert len(colors) == 12
+```
+
+Use existing colors as anchors without returning them:
+
+```python
+new_colors = extend_palette(brand, 10, include_existing=False)
+```
+
+Here `target_size=10` still describes the final palette size, so `new_colors`
+contains eight generated colors when `brand` contains two colors.
+
+## Map Labels To Colors
+
+Use `create_label_palette()` when positions should influence which label gets
+which color. Nearby or overlapping labels are assigned more distinct colors.
+
+![Word-shaped scatterplot colored three ways](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png)
+
+Each letter above is a separate label. With Turbo colors assigned in order
+(top), neighboring letters get similar colors. Reordering the same colors by
+position (middle) helps; `create_label_palette()` (bottom) generates colors
+and assigns them so neighbors stay distinct. The source is in
+[`examples/okpalette_word_scatter.py`](https://github.com/pmbaumgartner/okpalette/blob/main/examples/okpalette_word_scatter.py).
+
+```python
+from okpalette import create_label_palette
+
+positions = [(0.0, 0.0), (0.2, 0.0), (5.0, 0.0), (5.2, 0.0)]
+labels = ["control", "treated", "control", "outlier"]
+
+colors = create_label_palette(positions, labels)
+# {"control": "#90ff00", "treated": "#000058", "outlier": "#ff38ff"}
+```
+
+`positions` may be 1D scalars or 1D, 2D, or 3D coordinate rows, as lists,
+tuples, NumPy arrays, or similar array-likes. Coordinates must be finite, and
+`positions` and `labels` must have the same length. Labels may be strings,
+integers, tuples, or other hashable Python objects. The returned dict preserves
+first-seen label order.
+
+Keep specific label colors fixed:
+
+```python
+colors = create_label_palette(
+    positions,
+    labels,
+    fixed_colors={"control": "#0057b8"},
+)
+```
+
+For pandas, polars, and other dataframe-like objects, read position and label
+columns by duck typing (no dataframe dependency is required):
+
+```python
+from okpalette import create_label_palette_from_columns
+
+colors = create_label_palette_from_columns(
+    data,
+    positions=["x", "y"],
+    label="cluster",
+)
+```
+
 ## Tune Appearance
 
-### Background Contrast 
+### Background Contrast
 
 By default, palettes are generated without a background constraint. Pass both
 `background` and `background_contrast` when you want colors separated from a
@@ -326,20 +277,13 @@ colors = create_palette(
 against those backgrounds. `avoid_colors` keeps exact colors out of the palette
 and uses them as distance anchors.
 
-### Colorblind-aware generation 
+### Colorblind-Aware Generation
 
 Opt into colorblind-aware generation when pairwise palette separability should
 be tested under selected color vision deficiency simulations:
 
 ```python
 colors = create_palette(12, colorblind_mode="all")
-```
-
-CLI:
-
-```bash
-okpalette create 12 --colorblind-mode red-green
-okpalette create 12 --colorblind-mode all
 ```
 
 `colorblind_mode` may be `None`, `"protan"`, `"deutan"`, `"tritan"`,
@@ -353,22 +297,45 @@ colorblind-safe. If you also set
 `background_contrast="high"` or `"wcag"`, WCAG contrast is still checked against
 the ordinary sRGB background, not against simulated colors.
 
-### Limit hue ranges
-
-```python
-warm = create_palette(10, hue=(330, 100))
-cool = create_palette(10, hue=(150, 280))
-```
-
-Common constraints:
+### Lightness, Chroma, And Hue
 
 ```python
 muted = create_palette(12, chroma=(0.02, 0.12))
 bright = create_palette(12, chroma=(0.10, None))
 mid_lightness = create_palette(12, lightness=(0.30, 0.80))
+
+warm = create_palette(10, hue=(330, 100))
+cool = create_palette(10, hue=(150, 280))
 ```
 
-`lightness` is OKLab `L` in `0..1`. `hue` is OKLCH degrees in `0..360`; ranges can wrap around zero.
+`lightness` is OKLab `L` in `0..1`. `chroma` is OKLCH chroma; `None` leaves a
+bound open. `hue` is OKLCH degrees in `0..360`; ranges can wrap around zero.
+
+### Grid Size
+
+`grid_size` controls how many candidate colors are searched.
+
+```python
+quick = create_palette(24, grid_size="coarse")  # step 16
+default = create_palette(24, grid_size="medium")  # step 8
+fine = create_palette(24, grid_size="fine")  # step 4
+custom = create_palette(24, grid_size=12)
+```
+
+If constraints leave too few candidates, `okpalette` raises `ValueError` with a hint
+to relax `lightness`, `chroma`, `hue`, or `grid_size`.
+
+## Output Formats
+
+Use RGB tuples when that fits your plotting library better:
+
+```python
+rgb = create_palette(5, format="rgb")
+# [(0, 0, 88), (144, 255, 0), ...]
+
+rgb01 = create_palette(5, format="rgb01")
+# [(0.0, 0.0, 0.34509803921568627), ...]
+```
 
 ## Preview And Save
 
@@ -393,23 +360,99 @@ svg = palette_svg(colors)
 png = palette_png(colors)
 ```
 
+## CLI
 
-## Grid Size
+The CLI covers palette creation and extension:
 
-`grid_size` controls how many candidate colors are searched.
-
-```python
-quick = create_palette(24, grid_size="coarse")  # step 16
-default = create_palette(24, grid_size="medium")  # step 8
-fine = create_palette(24, grid_size="fine")  # step 4
-custom = create_palette(24, grid_size=12)
+```bash
+okpalette create 10
+okpalette create 5 --format rgb
+okpalette create 12 --colorblind-mode red-green
+okpalette extend 12 --color "#0057b8" --color "#ffd700"
+okpalette extend 10 --color "#0057b8" --generated-only
 ```
 
-If constraints leave too few candidates, `okpalette` raises `ValueError` with a hint
-to relax `lightness`, `chroma`, `hue`, or `grid_size`.
+`okpalette create` and `okpalette extend` always write JSON on success, with
+the stable shape:
 
+```json
+{"colors":["#000058","#90ff00","#ff38ff"],"format":"hex"}
+```
 
-## API
+For `--format rgb` and `--format rgb01`, tuple colors are serialized as JSON
+arrays. Validation and generation errors write a short message to stderr and
+leave stdout empty.
+
+## Rust API
+
+Rust crates can use the generator directly without depending on Python:
+
+```toml
+[dependencies]
+okpalette = "1.1"
+```
+
+The one-shot functions use the same defaults as the Python API and CLI:
+
+```rust
+use okpalette::{extend_palette, generate_palette, Rgb8};
+
+let colors = generate_palette(8).unwrap();
+let brand = [
+    "#0057b8".parse::<Rgb8>().unwrap(),
+    "#ffd700".parse().unwrap(),
+];
+let extended = extend_palette(&brand, 8).unwrap();
+```
+
+Use `PaletteGenerator` for reusable, typed configuration:
+
+```rust
+use okpalette::{
+    BackgroundContrast, CandidateConstraints, ChromaRange, ColorblindMode,
+    DistanceWeights, GridSize, LightnessRange, PaletteGenerator, Rgb8,
+};
+
+let generator = PaletteGenerator::new()
+    .grid_size(GridSize::Fine)
+    .constraints(
+        CandidateConstraints::new()
+            .with_lightness(LightnessRange::new(0.2, 0.9).unwrap())
+            .with_chroma(ChromaRange::new(Some(0.04), None).unwrap()),
+    )
+    .distance_weights(DistanceWeights::new(0.8, 1.2).unwrap())
+    .backgrounds(
+        [Rgb8::new(255, 255, 255)],
+        BackgroundContrast::Normal,
+    )
+    .unwrap()
+    .colorblind_mode(ColorblindMode::All);
+
+let colors = generator.generate(12).unwrap();
+let new_colors = generator.generate_extension(&colors[..2], 10).unwrap();
+```
+
+`LabelPaletteRequest` exposes the position-aware label generator. Typed colors,
+constraints, parsing, and SVG/PNG rendering are also available from the crate
+root; candidate search and label-assignment internals remain private. See the
+full API on [docs.rs](https://docs.rs/okpalette).
+
+## Agent Skill
+
+`okpalette` includes an optional packaged agent skill for simple JSON CLI usage.
+Install it into a personal Codex or Claude skill directory:
+
+```bash
+okpalette install-skill --agent codex
+okpalette install-skill --agent claude
+```
+
+Use `--dry-run` to print the target path without writing, and `--overwrite` to
+replace an existing installed skill. The Codex installer respects `$CODEX_HOME`
+and otherwise writes under `~/.codex`; Claude skills are installed under
+`~/.claude`.
+
+## Python API Reference
 
 ```python
 create_palette(
@@ -540,3 +583,27 @@ optimal.
   [Machado, Oliveira, and Fernandes 2009](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/Machado_Oliveira_Fernandes_CVD_Vis2009_final.pdf)
   and the
   [CVD simulation project page](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html).
+
+## Development
+
+The extension module is built with [maturin](https://www.maturin.rs/). Before
+sending changes, run:
+
+```bash
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+uv run --extra dev ruff check .
+uv run --extra dev ty check
+```
+
+README images are regenerated with:
+
+```bash
+uv run --extra dev python examples/readme_swatches.py
+uv run --extra dev python examples/okpalette_word_scatter.py
+```
+
+See the [changelog](https://github.com/pmbaumgartner/okpalette/blob/main/CHANGELOG.md)
+for release history. `okpalette` is released under the
+[MIT License](https://github.com/pmbaumgartner/okpalette/blob/main/LICENSE).

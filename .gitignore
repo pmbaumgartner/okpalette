@@ -23,5 +23,3 @@ python/okpalette/_core*.so
 
 # Generated smoke-test review artifacts
 /output/
-
-.docs/

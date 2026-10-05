@@ -16,7 +16,6 @@ exclude = [
     ".github/**",
     ".gitignore",
     "AGENTS.md",
-    "docs/**",
     "examples/**",
     "pyproject.toml",
     "python/**",
