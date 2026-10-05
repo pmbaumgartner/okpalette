@@ -2,11 +2,8 @@ mod assignment;
 mod graph;
 mod sampling;
 
-use crate::algorithm::{select_palette, PaletteAnchors, PaletteOptions};
-use crate::candidates::{
-    generate_candidates_with_background_filter, BackgroundFilter, Candidate, CandidateConstraints,
-    GridSize,
-};
+use crate::algorithm::{generate_constrained_palette, PaletteAnchors, PaletteOptions};
+use crate::candidates::{BackgroundFilter, Candidate, CandidateConstraints, GridSize};
 use crate::color::{ColorblindMode, Rgb8};
 use crate::distance::DistanceWeights;
 use crate::error::{GlasbeyError, Result};
@@ -78,14 +75,10 @@ pub(crate) fn select_label_palette(options: LabelPaletteOptions<'_>) -> Result<V
         .copied()
         .chain(fixed_anchor_colors.iter().copied())
         .collect();
-    let candidates = generate_candidates_with_background_filter(
+    let generated_palette = generate_constrained_palette(
         options.grid_size,
         options.constraints,
         options.background_filter,
-        generated_count,
-    )?;
-    let generated_palette = select_palette(
-        &candidates,
         PaletteOptions {
             palette_size: generated_count,
             anchors: PaletteAnchors {
@@ -187,6 +180,7 @@ fn validate_options(options: LabelPaletteOptions<'_>) -> Result<ValidatedLabelGe
 mod tests {
     use super::graph::LabelGraph;
     use super::*;
+    use crate::algorithm::select_palette;
     use crate::candidates::generate_candidates;
     use crate::test_support::{rgb, separated_label_fixture};
 

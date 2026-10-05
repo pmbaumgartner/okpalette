@@ -1,6 +1,6 @@
 use okpalette::{
     extend_palette, generate_palette, BackgroundContrast, CandidateConstraints, ChromaRange,
-    DistanceWeights, GridSize, LabelPaletteRequest, LightnessRange, OkPaletteError,
+    ColorblindMode, DistanceWeights, GridSize, LabelPaletteRequest, LightnessRange, OkPaletteError,
     PaletteGenerator, Rgb8,
 };
 
@@ -86,6 +86,44 @@ fn generator_supports_position_aware_label_palettes() {
     let palette = fast_generator().generate_for_labels(request).unwrap();
     assert_eq!(palette.len(), 3);
     assert_eq!(palette[1], Rgb8::new(255, 0, 0));
+}
+
+#[test]
+fn label_generated_colors_match_extension_with_fixed_colors_as_anchors() {
+    let coordinates = [0.0, 0.0, 0.1, 0.0, 4.0, 4.0, 4.1, 4.0];
+    let label_ids = [0, 1, 2, 3];
+    let red = Rgb8::new(255, 0, 0);
+    let fixed = [None, Some(red), None, None];
+    let seed = Rgb8::new(0, 0, 255);
+    let avoid = Rgb8::new(0, 128, 0);
+    let white = Rgb8::new(255, 255, 255);
+    let request = LabelPaletteRequest::new(&coordinates, 2, &label_ids, 4)
+        .fixed_colors(&fixed)
+        .neighbors(2);
+
+    for contrast in [BackgroundContrast::Normal, BackgroundContrast::Wcag] {
+        let generator = fast_generator()
+            .seed_colors([seed])
+            .avoid_colors([avoid])
+            .backgrounds([white], contrast)
+            .unwrap()
+            .distance_weights(DistanceWeights::new(0.8, 1.2).unwrap())
+            .colorblind_mode(ColorblindMode::Deutan);
+        let label_palette = generator.generate_for_labels(request).unwrap();
+        assert_eq!(label_palette[1], red);
+        let mut generated: Vec<_> = label_palette
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, color)| fixed[index].is_none().then_some(color))
+            .collect();
+        let mut ordinary = generator.generate_extension(&[red], 3).unwrap();
+        generated.sort_by_key(|color| (color.r, color.g, color.b));
+        ordinary.sort_by_key(|color| (color.r, color.g, color.b));
+        assert_eq!(generated, ordinary);
+        for color in generated {
+            assert!(![red, seed, avoid, white].contains(&color));
+        }
+    }
 }
 
 #[test]

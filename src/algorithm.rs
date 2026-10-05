@@ -1,6 +1,9 @@
 use rayon::prelude::*;
 
-use crate::candidates::Candidate;
+use crate::candidates::{
+    generate_candidates_with_background_filter, BackgroundFilter, Candidate, CandidateConstraints,
+    GridSize,
+};
 use crate::color::{ColorProfile, ColorblindMode, Rgb8};
 use crate::distance::DistanceWeights;
 use crate::error::{GlasbeyError, Result};
@@ -18,6 +21,22 @@ pub(crate) struct PaletteOptions<'a> {
     pub(crate) anchors: PaletteAnchors<'a>,
     pub(crate) weights: DistanceWeights,
     pub(crate) colorblind_mode: ColorblindMode,
+}
+
+/// Generate and select colors using already assembled, role-validated anchors.
+pub(crate) fn generate_constrained_palette(
+    grid_size: GridSize,
+    constraints: CandidateConstraints,
+    background_filter: BackgroundFilter<'_>,
+    options: PaletteOptions<'_>,
+) -> Result<Vec<Rgb8>> {
+    let candidates = generate_candidates_with_background_filter(
+        grid_size,
+        constraints,
+        background_filter,
+        options.palette_size,
+    )?;
+    select_palette(&candidates, options)
 }
 
 pub(crate) fn select_palette(

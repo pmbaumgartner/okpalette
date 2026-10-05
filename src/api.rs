@@ -1,7 +1,7 @@
-use crate::algorithm::{select_palette, PaletteAnchors, PaletteOptions};
+use crate::algorithm::{generate_constrained_palette, PaletteAnchors, PaletteOptions};
 use crate::candidates::{
-    generate_candidates_with_background_filter, BackgroundFilter, CandidateConstraints, GridSize,
-    NORMAL_BACKGROUND_DISTANCE_SQUARED, WCAG_NON_TEXT_CONTRAST_RATIO,
+    BackgroundFilter, CandidateConstraints, GridSize, NORMAL_BACKGROUND_DISTANCE_SQUARED,
+    WCAG_NON_TEXT_CONTRAST_RATIO,
 };
 use crate::color::{ColorblindMode, Rgb8};
 use crate::distance::DistanceWeights;
@@ -206,14 +206,10 @@ impl PaletteGenerator {
         };
         let background_filter = self.background_filter()?;
         background_filter.validate_user_colors("seed_colors", seeds)?;
-        let candidates = generate_candidates_with_background_filter(
+        generate_constrained_palette(
             self.grid_size,
             self.constraints,
             background_filter,
-            palette_size,
-        )?;
-        let palette = select_palette(
-            &candidates,
             PaletteOptions {
                 palette_size,
                 anchors: PaletteAnchors {
@@ -224,9 +220,7 @@ impl PaletteGenerator {
                 weights: self.weights,
                 colorblind_mode: self.colorblind_mode,
             },
-        )?;
-
-        Ok(palette)
+        )
     }
 
     fn backgrounds_slice(&self) -> &[Rgb8] {
