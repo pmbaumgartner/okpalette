@@ -9,7 +9,7 @@
 
 Fast, deterministic categorical color palettes for Python, Rust, and the command line.
 
-![Twelve default okpalette colors](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-default-12.png)
+![Twelve default okpalette colors](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-default.png)
 
 Use `okpalette` when you need distinct, stable colors for labels, plots, dashboards, or reports.
 
@@ -22,13 +22,7 @@ Use `okpalette` when you need distinct, stable colors for labels, plots, dashboa
 - **Constraints.** Control lightness, chroma, and hue; keep colors separated from a background; optimize under colorblind simulations.
 - **Lightweight.** No required Python dependencies. The core is written in Rust and is also available as a Rust crate.
 
-Want something calmer than the defaults? Constrain chroma:
-
-```python
-create_palette(12, chroma=(0.02, 0.12))
-```
-
-![Twelve muted okpalette colors](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-muted-12.png)
+See the [gallery](#gallery) for what each option produces.
 
 **When not to use it:** `okpalette` is for categorical data. For ordered or
 continuous values, use a sequential or diverging colormap instead. Beyond
@@ -95,7 +89,57 @@ From a shell:
 
 ```bash
 okpalette create 8
+# {"colors":["#000058","#90ff00","#ff38ff","#886800","#1058ff","#88c8ff","#800078","#ffa038"],"format":"hex"}
 ```
+
+## Gallery
+
+Each palette below has 12 colors. The options are explained in
+[Extend Colors](#extend-colors) and [Tune Appearance](#tune-appearance).
+
+**Default:** `create_palette(12)`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-default.png" alt="default palette swatch" width="600">
+
+**Extend brand colors (the first two are kept):** `extend_palette(["#0057b8", "#ffd700"], 12)`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-extend.png" alt="extend palette swatch" width="600">
+
+**High contrast against a dark background:** `create_palette(12, background="#1e1e1e", background_contrast="high")`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-background.png" alt="background palette swatch" width="600">
+
+**Red-green colorblind-aware:** `create_palette(12, colorblind_mode="red-green")`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-red-green.png" alt="red green palette swatch" width="600">
+
+**Muted:** `create_palette(12, chroma=(0.02, 0.12))`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-muted.png" alt="muted palette swatch" width="600">
+
+**Bright:** `create_palette(12, chroma=(0.10, None))`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-bright.png" alt="bright palette swatch" width="600">
+
+**Mid lightness:** `create_palette(12, lightness=(0.30, 0.80))`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-mid-lightness.png" alt="mid lightness palette swatch" width="600">
+
+**Warm hues:** `create_palette(12, hue=(330, 100))`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-warm.png" alt="warm palette swatch" width="600">
+
+**Cool hues:** `create_palette(12, hue=(150, 280))`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-cool.png" alt="cool palette swatch" width="600">
+
+**Coarse grid (faster search):** `create_palette(12, grid_size="coarse")`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-coarse.png" alt="coarse palette swatch" width="600">
+
+**Fine grid (wider search):** `create_palette(12, grid_size="fine")`
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-fine.png" alt="fine palette swatch" width="600">
 
 ## Use With Plotting Libraries
 
@@ -197,13 +241,13 @@ contains eight generated colors when `brand` contains two colors.
 Use `create_label_palette()` when positions should influence which label gets
 which color. Nearby or overlapping labels are assigned more distinct colors.
 
-![Word-shaped scatterplot colored three ways](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png)
+![Sixteen clusters colored in label order and with create_label_palette](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/label-palette-comparison.png)
 
-Each letter above is a separate label. With Turbo colors assigned in order
-(top), neighboring letters get similar colors. Reordering the same colors by
-position (middle) helps; `create_label_palette()` (bottom) generates colors
-and assigns them so neighbors stay distinct. The source is in
-[`examples/okpalette_word_scatter.py`](https://github.com/pmbaumgartner/okpalette/blob/main/examples/okpalette_word_scatter.py).
+Each cluster above is a separate label. Dashed lines join touching clusters
+whose colors are easy to confuse. Assigning `create_palette()` colors in label
+order (left) puts similar colors side by side; `create_label_palette()` (right)
+chooses and assigns colors so neighbors stay distinct. For a larger example,
+see the [word scatterplot](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png).
 
 ```python
 from okpalette import create_label_palette
@@ -600,7 +644,7 @@ uv run --extra dev ty check
 README images are regenerated with:
 
 ```bash
-uv run --extra dev python examples/readme_swatches.py
+uv run --extra dev python examples/readme_images.py
 uv run --extra dev python examples/okpalette_word_scatter.py
 ```
 
