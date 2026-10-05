@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.1 - 2026-10-05
+
+### Changed
+
+- Centralized extension target-size handling in Rust while preserving Python
+  and CLI output, including generated-only palettes.
+- Unified internal constrained generation and selection for ordinary and
+  label-aware palettes without changing the public APIs.
+- Strengthened tests for RGB conversion, chroma bounds, extension semantics,
+  and shared generation behavior.
+
 ## 1.1.0 - 2026-07-31
 
 ### Added
