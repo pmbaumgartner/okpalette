@@ -55,6 +55,21 @@ def test_chroma_rejects_invalid_bounds(chroma: object) -> None:
         create_palette(1, chroma=cast(Any, chroma))
 
 
+@pytest.mark.parametrize("minimum", [0.02, None])
+def test_chroma_accepts_and_enforces_finite_upper_bound(minimum: float | None) -> None:
+    maximum = 0.12
+    palette = raw_palette(12, grid_size="coarse", chroma=(minimum, maximum))
+
+    assert len(palette) == 12
+    assert len(set(palette)) == 12
+    # Candidates are RGB8 already, so no output quantization allowance is needed.
+    # Allow 1e-6 for the native f32 conversion versus this independent f64 calculation.
+    tolerance = 1e-6
+    for color in palette:
+        chroma = _oklab_chroma(color)
+        assert (minimum or 0.0) - tolerance <= chroma <= maximum + tolerance, color
+
+
 @pytest.mark.parametrize(
     "hue",
     [
@@ -220,6 +235,17 @@ def _contrast_ratio(left: str, right: str) -> float:
     light = max(left_luminance, right_luminance)
     dark = min(left_luminance, right_luminance)
     return (light + 0.05) / (dark + 0.05)
+
+
+def _oklab_chroma(color: str) -> float:
+    # Standard sRGB -> linear RGB -> OKLab equations, without calling the native converter.
+    red, green, blue = (_srgb_to_linear(int(color[i : i + 2], 16)) for i in (1, 3, 5))
+    l_root = (0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue) ** (1 / 3)
+    m_root = (0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue) ** (1 / 3)
+    s_root = (0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue) ** (1 / 3)
+    a = 1.9779984951 * l_root - 2.4285922050 * m_root + 0.4505937099 * s_root
+    b = 0.0259040371 * l_root + 0.7827717662 * m_root - 0.8086757660 * s_root
+    return math.hypot(a, b)
 
 
 def _relative_luminance(color: str) -> float:

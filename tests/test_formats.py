@@ -20,10 +20,21 @@ def test_rgb_format_returns_integer_tuples() -> None:
     assert_rgb_palette(palette, 4)
 
 
+def test_rgb_format_preserves_channel_values() -> None:
+    assert extend_palette(["#abcdef"], 1, format="rgb") == [(171, 205, 239)]
+
+
 def test_rgb01_format_returns_normalized_float_tuples() -> None:
     palette = create_palette(4, grid_size="coarse", format="rgb01")
 
     assert_rgb_palette(palette, 4, normalized=True)
+
+
+def test_rgb01_format_scales_channels_and_preserves_white_endpoint() -> None:
+    palette = extend_palette(["#abcdef", "#ffffff"], 2, format="rgb01")
+
+    assert palette[1] == (1.0, 1.0, 1.0)
+    assert palette[0] == pytest.approx((171 / 255, 205 / 255, 239 / 255))
 
 
 @pytest.mark.parametrize(
