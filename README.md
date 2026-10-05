@@ -94,8 +94,9 @@ okpalette create 8
 
 ## Gallery
 
-Each palette below has 12 colors. The options are explained in
-[Extend Colors](#extend-colors) and [Tune Appearance](#tune-appearance).
+Each swatch below has 12 colors. The options are explained in
+[Extend Colors](#extend-colors), [Tune Appearance](#tune-appearance), and
+[Map Labels To Colors](#map-labels-to-colors).
 
 **Default:** `create_palette(12)`
 
@@ -140,6 +141,10 @@ Each palette below has 12 colors. The options are explained in
 **Fine grid (wider search):** `create_palette(12, grid_size="fine")`
 
 <img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/palette-fine.png" alt="fine palette swatch" width="600">
+
+**Position-aware labels:** `create_label_palette(positions, labels)`, compared with a colormap sampled in label order
+
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/label-palette-comparison.png" alt="Ten overlapping groups colored with Turbo in label order and with create_label_palette" width="600">
 
 ## Use With Plotting Libraries
 
@@ -241,12 +246,13 @@ contains eight generated colors when `brand` contains two colors.
 Use `create_label_palette()` when positions should influence which label gets
 which color. Nearby or overlapping labels are assigned more distinct colors.
 
-![Sixteen clusters colored in label order and with create_label_palette](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/label-palette-comparison.png)
+<img src="https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/label-palette-comparison.png" alt="Ten overlapping groups colored with Turbo in label order and with create_label_palette" width="600">
 
-Each cluster above is a separate label. Dashed lines join touching clusters
-whose colors are easy to confuse. Assigning `create_palette()` colors in label
-order (left) puts similar colors side by side; `create_label_palette()` (right)
-chooses and assigns colors so neighbors stay distinct. For a larger example,
+Each group of points above is a separate label, and each group overlaps its
+neighbors. Sampling a colormap such as Turbo in label order (top) gives
+neighboring groups nearly the same color, so they blur together.
+`create_label_palette()` (bottom) assigns colors so overlapping groups stay
+distinct. For a larger example,
 see the [word scatterplot](https://raw.githubusercontent.com/pmbaumgartner/okpalette/main/examples/output/okpalette-word-scatter.png).
 
 ```python

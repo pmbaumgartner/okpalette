@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import argparse
 import math
-from collections.abc import Mapping
 from pathlib import Path
 from random import Random
 from typing import Any
 
 from okpalette import create_label_palette, create_palette, extend_palette
-from okpalette_word_scatter import _hex_to_oklab, _oklab_distance
+from okpalette_word_scatter import turbo_colors
 
 Point2D = tuple[float, float]
 
@@ -16,11 +15,6 @@ SWATCH_HEIGHT = 0.5
 SWATCH_DPI = 200
 BRAND = ["#0057b8", "#ffd700"]
 DARK_BACKGROUND = "#1e1e1e"
-
-# Labels whose cluster centers are closer than this count as touching.
-TOUCHING_DISTANCE = 1.6
-# Touching labels whose OKLab distance falls below this count as easy to confuse.
-CONFUSABLE_DISTANCE = 0.25
 
 
 def gallery() -> dict[str, dict[str, Any]]:
@@ -76,76 +70,47 @@ def save_swatch(
     plt.close(fig)
 
 
-def build_clusters(
-    count: int = 16,
+def build_chain(
+    count: int = 10,
     *,
-    seed: int = 2,
-    points_per_cluster: int = 60,
-) -> tuple[list[Point2D], list[Point2D], list[int]]:
+    seed: int = 0,
+    points_per_group: int = 70,
+) -> tuple[list[Point2D], list[int]]:
     rng = Random(seed)
-    centers: list[Point2D] = []
-    while len(centers) < count:
-        center = (rng.uniform(0, 10), rng.uniform(0, 4))
-        if all(math.dist(center, other) > 0.9 for other in centers):
-            centers.append(center)
-
     positions: list[Point2D] = []
     labels: list[int] = []
-    for label, (x, y) in enumerate(centers):
-        for _ in range(points_per_cluster):
-            positions.append((rng.gauss(x, 0.35), rng.gauss(y, 0.35)))
+    for label in range(count):
+        x, y = label * 1.0, 0.9 * math.sin(label * 0.8)
+        for _ in range(points_per_group):
+            positions.append((rng.gauss(x, 0.32), rng.gauss(y, 0.32)))
             labels.append(label)
-    return centers, positions, labels
-
-
-def confusable_pairs(centers: list[Point2D], palette: Mapping[Any, str]) -> list[tuple[int, int]]:
-    return [
-        (left, right)
-        for left in range(len(centers))
-        for right in range(left + 1, len(centers))
-        if math.dist(centers[left], centers[right]) < TOUCHING_DISTANCE
-        and _oklab_distance(_hex_to_oklab(palette[left]), _hex_to_oklab(palette[right]))
-        < CONFUSABLE_DISTANCE
-    ]
+    return positions, labels
 
 
 def save_label_comparison(path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    centers, positions, labels = build_clusters()
-    in_order = dict(enumerate(create_palette(len(centers))))
-    position_aware = create_label_palette(positions, labels)
+    positions, labels = build_chain()
+    label_count = len(set(labels))
     panels = [
-        ("create_palette(16), assigned in label order", in_order),
-        ("create_label_palette(positions, labels)", position_aware),
+        ("Turbo colormap, sampled in label order", dict(enumerate(turbo_colors(label_count)))),
+        ("create_label_palette(positions, labels)", create_label_palette(positions, labels)),
     ]
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 2.4), facecolor="white")
+    fig, axes = plt.subplots(2, 1, figsize=(8, 3.2), facecolor="white")
     for axis, (title, palette) in zip(axes, panels, strict=True):
-        pairs = confusable_pairs(centers, palette)
         axis.scatter(
             [x for x, _ in positions],
             [y for _, y in positions],
             c=[palette[label] for label in labels],
-            s=4,
+            s=6,
             linewidths=0,
         )
-        for left, right in pairs:
-            (x0, y0), (x1, y1) = centers[left], centers[right]
-            axis.plot([x0, x1], [y0, y1], color="black", linewidth=2.0, linestyle=(0, (2, 1.5)))
-        noun = "pair" if len(pairs) == 1 else "pairs"
-        axis.set_title(
-            f"{title}\n{len(pairs)} touching {noun} with similar colors",
-            fontsize=10,
-            family="monospace",
-        )
-        axis.set_aspect("equal", adjustable="box")
-        axis.set_xticks([])
-        axis.set_yticks([])
-        for spine in axis.spines.values():
-            spine.set_visible(False)
+        axis.set_title(title, fontsize=10, family="monospace")
+        axis.set_aspect("equal")
+        axis.axis("off")
 
-    fig.subplots_adjust(wspace=0.05)
+    fig.tight_layout()
     fig.savefig(path, dpi=SWATCH_DPI, facecolor="white", bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
 
