@@ -96,6 +96,31 @@ def test_extend_generated_only_omits_existing_colors(capsys: pytest.CaptureFixtu
     assert "#00ff00" not in payload["colors"]
 
 
+def test_extend_generated_only_at_existing_size(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = _cli.main(["extend", "1", "--color", "#f00", "--generated-only"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert json.loads(captured.out)["colors"] == []
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize("generated_only", [False, True])
+def test_extend_rejects_target_below_existing_size(
+    generated_only: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["extend", "1", "--color", "#f00", "--color", "#0f0"]
+    if generated_only:
+        args.append("--generated-only")
+    exit_code = _cli.main(args)
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "target_size" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_extend_accepts_extra_seed_colors_without_returning_them(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

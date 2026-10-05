@@ -91,21 +91,6 @@ impl PyPaletteGenerator {
         .map_err(to_py_value_error)
     }
 
-    fn generate_extension(
-        &self,
-        py: Python<'_>,
-        colors: Vec<String>,
-        count: usize,
-    ) -> PyResult<Vec<String>> {
-        let generator = self.generator.clone();
-        py.detach(move || {
-            let colors = parse_hex_colors(colors)?;
-            generator.generate_extension(&colors, count)
-        })
-        .map(palette_to_hex)
-        .map_err(to_py_value_error)
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn generate_for_labels(
         &self,
@@ -339,16 +324,20 @@ mod tests {
     }
 
     #[test]
-    fn native_bridge_uses_canonical_extension_methods() {
+    fn native_bridge_extends_to_final_target_size() {
         let generator = native_generator(Vec::new(), None, None, 64, None).unwrap();
-        let existing = vec!["#ff0000".to_owned()];
+        let existing = vec!["#F00".to_owned()];
 
         let extended = run_with_python(|py| generator.extend(py, existing.clone(), 3)).unwrap();
-        let generated =
-            run_with_python(|py| generator.generate_extension(py, existing, 2)).unwrap();
-
+        assert_canonical_hex_palette(&extended, 3);
         assert_eq!(extended[0], "#ff0000");
-        assert_eq!(&extended[1..], generated);
+        assert!(!extended[1..].contains(&"#ff0000".to_owned()));
+
+        let unchanged = run_with_python(|py| generator.extend(py, existing.clone(), 1)).unwrap();
+        assert_eq!(unchanged, ["#ff0000"]);
+        let error = run_with_python(|py| generator.extend(py, existing, 0)).unwrap_err();
+        run_with_python(|py| assert!(error.is_instance_of::<PyValueError>(py)));
+        assert!(error.to_string().contains("target_size"));
     }
 
     #[test]

@@ -64,6 +64,7 @@ def test_create_palette_returns_requested_size(palette_size: int) -> None:
 def test_zero_sized_palette_is_empty() -> None:
     assert create_palette(0) == []
     assert extend_palette([], 0) == []
+    assert extend_palette([], 0, include_existing=False) == []
 
 
 @pytest.mark.parametrize(
@@ -72,7 +73,9 @@ def test_zero_sized_palette_is_empty() -> None:
         lambda: create_palette(-1),
         lambda: create_palette(cast(Any, True)),
         lambda: extend_palette([], -1),
+        lambda: extend_palette([], cast(Any, True)),
         lambda: extend_palette(["#ff0000", "#00ff00"], 1, include_existing=True),
+        lambda: extend_palette(["#ff0000", "#00ff00"], 1, include_existing=False),
     ],
 )
 def test_invalid_size_inputs_raise_value_error(call: object) -> None:
@@ -88,33 +91,59 @@ def test_extend_palette_includes_existing_colors_first() -> None:
     assert len(set(palette)) == len(palette)
 
 
-def test_extend_palette_can_return_only_generated_colors() -> None:
+@pytest.mark.parametrize("format", ["hex", "rgb", "rgb01"])
+def test_extend_palette_can_return_only_generated_colors(format: Any) -> None:
+    existing = ["#F00", "0F0"]
+    full = extend_palette(
+        existing, 3, seed_colors=["#00f"], grid_size="coarse", format=format
+    )
     palette = extend_palette(
-        ["#ff0000", "#00ff00"],
+        existing,
         3,
         include_existing=False,
+        seed_colors=["#00f"],
         grid_size="coarse",
+        format=format,
     )
 
     assert len(palette) == 1
-    assert "#ff0000" not in palette
-    assert "#00ff00" not in palette
+    assert palette == full[2:]
+    assert palette[0] not in full[:2]
+
+
+@pytest.mark.parametrize("include_existing", [True, False])
+def test_extend_palette_at_existing_size(include_existing: bool) -> None:
+    palette = extend_palette(["#F00", "0F0"], 2, include_existing=include_existing)
+
+    assert palette == (["#ff0000", "#00ff00"] if include_existing else [])
+
+
+def test_extend_palette_requires_boolean_include_existing() -> None:
+    with pytest.raises(ValueError, match="include_existing must be a boolean"):
+        extend_palette(["#f00"], 2, include_existing=cast(Any, 1))
 
 
 def test_rgb8_black_and_near_black_are_accepted() -> None:
     assert extend_palette([(0, 0, 0), (1, 1, 1)], 2) == ["#000000", "#010101"]
 
 
-def test_extend_palette_accepts_extra_seed_colors_without_returning_them() -> None:
+@pytest.mark.parametrize("include_existing", [True, False])
+def test_extend_palette_accepts_extra_seed_colors_without_returning_them(
+    include_existing: bool,
+) -> None:
     palette = extend_palette(
         ["#ff0000"],
         3,
+        include_existing=include_existing,
         seed_colors=["#00ff00"],
         grid_size="coarse",
     )
 
-    assert len(palette) == 3
-    assert palette[0] == "#ff0000"
+    assert len(palette) == (3 if include_existing else 2)
+    if include_existing:
+        assert palette[0] == "#ff0000"
+    else:
+        assert "#ff0000" not in palette
     assert "#00ff00" not in palette
 
 

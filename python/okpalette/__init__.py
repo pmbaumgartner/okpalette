@@ -147,15 +147,9 @@ def extend_palette(
     )
 
     generator = _build_generator(palette_options)
-    if include_existing:
-        palette = generator.extend(existing, target)
-    else:
-        generated_count = target - len(existing)
-        if generated_count < 0:
-            raise ValueError(
-                "target_size must be greater than or equal to the existing palette length"
-            )
-        palette = generator.generate_extension(existing, generated_count)
+    palette = generator.extend(existing, target)
+    if not include_existing:
+        palette = palette[len(existing) :]
     return convert_hex_palette(palette, output_format)
 
 
