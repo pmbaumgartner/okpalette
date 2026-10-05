@@ -1,3 +1,7 @@
+[![okpalette on pypi.org](https://img.shields.io/pypi/v/okpalette.svg)]([https://crates.io/crates/okpalette](https://pypi.org/project/okpalette/))
+[![okpalette on Crates.io](https://img.shields.io/crates/v/okpalette.svg?color=brightgreen)](https://crates.io/crates/okpalette)
+[![Documentation](https://img.shields.io/docsrs/okpalette/latest.svg)](https://docs.rs/okpalette)
+
 # okpalette
 
 [![PyPI](https://img.shields.io/pypi/v/okpalette)](https://pypi.org/project/okpalette/)
